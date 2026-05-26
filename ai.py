@@ -57,7 +57,7 @@ class AI(commands.Cog):
         except:
             return None
 
-    # 📘 GET INFO + SKILL (DIPISAH)
+    # 📘 GET DATA (INFO + OBTAIN + SKILL DIPISAH)
     def get_data(self, title):
         params = {
             "action": "parse",
@@ -73,34 +73,45 @@ class AI(commands.Cog):
             soup = BeautifulSoup(html, "html.parser")
 
             info = ""
+            obtain = ""
             skill = ""
 
-            # ✅ INFO NORMAL
+            # ✅ INFO TEXT
             for tag in soup.find_all(["p", "li"]):
                 t = tag.get_text(" ", strip=True)
                 if t:
                     info += t + "\n"
 
-            # 🔥 SKILL TABLE
             tables = soup.find_all("table")
 
             for table in tables:
-                rows = table.find_all("tr")
+                text = table.get_text(" ", strip=True).lower()
 
-                for row in rows:
-                    cols = row.find_all(["td", "th"])
-                    row_text = " | ".join(col.get_text(" ", strip=True) for col in cols)
+                # 🔥 OBTAIN / RARITY TABLE
+                if any(x in text for x in ["rarity", "obtainment", "drop", "source", "trade"]):
+                    rows = table.find_all("tr")
+                    for row in rows:
+                        cols = row.find_all(["td", "th"])
+                        row_text = " | ".join(col.get_text(" ", strip=True) for col in cols)
+                        if row_text:
+                            obtain += row_text + "\n"
 
-                    if row_text:
-                        skill += row_text + "\n"
+                # ⚔️ SKILL TABLE
+                elif any(x in text for x in ["skill", "damage", "key", "move"]):
+                    rows = table.find_all("tr")
+                    for row in rows:
+                        cols = row.find_all(["td", "th"])
+                        row_text = " | ".join(col.get_text(" ", strip=True) for col in cols)
+                        if row_text:
+                            skill += row_text + "\n"
 
-            return info[:3000], skill[:3000]
+            return info[:3000], obtain[:3000], skill[:3000]
 
         except Exception as e:
             print(e)
-            return None, None
+            return None, None, None
 
-    # 🤖 AI (INFO ONLY)
+    # 🤖 AI INFO
     def ai_info(self, text):
         try:
             res = client.responses.create(
@@ -112,11 +123,7 @@ Explain this King Legacy item:
 
 Format:
 - What it is
-- How to get
 - Important info
-
-Rules:
-- No fake
 - Short
 """
             )
@@ -124,22 +131,41 @@ Rules:
         except:
             return text[:1000]
 
-    # 🤖 AI (SKILL ONLY)
+    # 🤖 AI OBTAIN
+    def ai_obtain(self, text):
+        try:
+            res = client.responses.create(
+                model="openai/gpt-oss-20b",
+                input=f"""
+Extract this info:
+
+{text}
+
+Format:
+- Rarity
+- Tradable
+- Drop / Source
+- How to obtain
+
+Short & clean
+"""
+            )
+            return res.output_text
+        except:
+            return text[:1000]
+
+    # 🤖 AI SKILL
     def ai_skill(self, text):
         try:
             res = client.responses.create(
                 model="openai/gpt-oss-20b",
                 input=f"""
-This is SKILL TABLE data:
-
-{text}
-
 Extract:
 - Skills
 - Keybinds
-- Damage/Info
+- Damage
 
-If no data say "No skill data"
+{text}
 """
             )
             return res.output_text
@@ -179,19 +205,20 @@ If no data say "No skill data"
             await interaction.followup.send("❌ Not found")
             return
 
-        info, skill = self.get_data(title)
+        info, obtain, skill = self.get_data(title)
 
         if not info:
             await interaction.followup.send("❌ Data kosong")
             return
 
         info_text = self.ai_info(info)
+        obtain_text = self.ai_obtain(obtain) if obtain else "No obtain data"
         skill_text = self.ai_skill(skill) if skill else "No skill data"
 
         img = self.get_image(title)
         url = f"https://king-legacy-official.fandom.com/wiki/{title.replace(' ', '_')}"
 
-        # 📄 PAGE 1 (INFO)
+        # 📄 PAGE 1
         embed1 = discord.Embed(
             title=f"📘 {title}",
             description=info_text[:1000],
@@ -199,8 +226,16 @@ If no data say "No skill data"
             url=url
         )
 
-        # 📄 PAGE 2 (SKILL)
+        # 📄 PAGE 2
         embed2 = discord.Embed(
+            title=f"📦 {title} Info",
+            description=obtain_text[:1000],
+            color=discord.Color.gold(),
+            url=url
+        )
+
+        # 📄 PAGE 3
+        embed3 = discord.Embed(
             title=f"⚔️ {title} Skills",
             description=skill_text[:1000],
             color=discord.Color.blue(),
@@ -210,8 +245,9 @@ If no data say "No skill data"
         if img:
             embed1.set_thumbnail(url=img)
             embed2.set_thumbnail(url=img)
+            embed3.set_thumbnail(url=img)
 
-        view = WikiView([embed1, embed2])
+        view = WikiView([embed1, embed2, embed3])
 
         await interaction.followup.send(embed=embed1, view=view)
 
