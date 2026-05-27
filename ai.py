@@ -95,10 +95,12 @@ class AI(commands.Cog):
             soup = BeautifulSoup(res["parse"]["text"]["*"], "html.parser")
 
             text = ""
-            for tag in soup.find_all(["p", "li", "td", "th"]):
-                t = tag.get_text(" ", strip=True)
-                if t:
-                    text += t + "\n"
+           for tag in soup.find_all(["p", "li", "td", "th"]):
+    t = tag.get_text("\n", strip=True)
+    t = t.replace("<br>", "\n").replace("<br/>", "\n")
+
+    if t:
+        text += t + "\n"
 
             return text
         except:
