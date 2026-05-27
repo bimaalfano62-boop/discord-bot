@@ -2,25 +2,31 @@ import discord
 from discord.ext import commands
 import asyncio
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # ✅ TAMBAHIN INI
 
-load_dotenv()
+# LOAD ENV
+load_dotenv()  # ✅ WAJIB
 
 TOKEN = os.getenv("DISCORD_TOKEN")
 
-bot = commands.Bot(command_prefix="!", intents=discord.Intents.default())
+intents = discord.Intents.default()
+bot = commands.Bot(command_prefix="!", intents=intents)
 
-async def load():
-    await bot.load_extension("ai")
-
-@bot.event
-async def on_ready():
-    print(f"Logged in as {bot.user}")
-    await bot.tree.sync()
-
+# LOAD COG
 async def main():
     async with bot:
-        await load()
+        await bot.load_extension("ai")  # file ai.py
         await bot.start(TOKEN)
+
+# 🔥 SYNC COMMAND (BIAR /HELP MUNCUL)
+@bot.event
+async def on_ready():
+    print(f"✅ Logged in as {bot.user}")
+
+    try:
+        synced = await bot.tree.sync()
+        print(f"✅ Synced {len(synced)} commands")
+    except Exception as e:
+        print(e)
 
 asyncio.run(main())
