@@ -48,7 +48,7 @@ class StockCog(commands.Cog):
         self.bot = bot
         self.stock = {}
 
-        # ✅ FIX TIMER SYSTEM
+        # TIMER SYSTEM
         self.default_timer = 60
         self.timer = self.default_timer
 
@@ -57,7 +57,7 @@ class StockCog(commands.Cog):
     def cog_unload(self):
         self.reset_task.cancel()
 
-    # ================= GLOBAL TIMER =================
+    # ================= TIMER =================
     @tasks.loop(minutes=1)
     async def reset_task(self):
         self.timer -= 1
@@ -66,10 +66,9 @@ class StockCog(commands.Cog):
             self.stock.clear()
             print("🔥 STOCK RESET")
 
-            # reset to last set timer
             self.timer = self.default_timer
 
-    # ================= UI =================
+    # ================= MAIN UI =================
     class MainView(View):
         def __init__(self, cog):
             super().__init__(timeout=None)
@@ -79,7 +78,7 @@ class StockCog(commands.Cog):
         async def input_stock(self, interaction: discord.Interaction, button: Button):
             await interaction.response.send_message(
                 "Select fruit:",
-                view=StockCog.FruitSelect(self.cog),
+                view=StockCog.FruitSelectView(self.cog),
                 ephemeral=True
             )
 
@@ -101,8 +100,8 @@ class StockCog(commands.Cog):
 
             await interaction.response.send_message(msg, ephemeral=True)
 
-    # ================= SELECT =================
-    class FruitSelect(View):
+    # ================= SELECT VIEW (FIXED) =================
+    class FruitSelectView(View):
         def __init__(self, cog):
             super().__init__(timeout=60)
             self.cog = cog
@@ -111,7 +110,7 @@ class StockCog(commands.Cog):
 
             options = [
                 discord.SelectOption(label=name[:100])
-                for name in fruit_names[:25]  # discord limit
+                for name in fruit_names[:25]
             ]
 
             self.add_item(StockCog.FruitDropdown(cog, options))
@@ -123,9 +122,15 @@ class StockCog(commands.Cog):
 
         async def callback(self, interaction: discord.Interaction):
             fruit = self.values[0]
-            await interaction.response.send_modal(StockCog.StockModal(self.cog, fruit))
 
-    # ================= MODAL =================
+            # 🔥 FIX: prevent interaction failed
+            await interaction.response.defer(ephemeral=True)
+
+            await interaction.followup.send_modal(
+                StockCog.StockModal(self.cog, fruit)
+            )
+
+    # ================= MODALS =================
     class StockModal(Modal, title="Input Stock"):
         def __init__(self, cog, fruit):
             super().__init__()
@@ -160,7 +165,7 @@ class StockCog(commands.Cog):
                 new_time = int(self.time.value)
 
                 self.cog.timer = new_time
-                self.cog.default_timer = new_time  # ✅ IMPORTANT
+                self.cog.default_timer = new_time
 
                 await interaction.response.send_message(
                     f"⏱ Timer set to {new_time} minutes",
