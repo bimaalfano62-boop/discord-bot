@@ -5,14 +5,11 @@ import json
 import os
 import asyncio
 
-from ai import get_item_info  # 🔥 CONNECT TO AI
+from ai import get_item_info
 
 STOCK_FILE = "stock.json"
 
 
-# =========================
-# DATA
-# =========================
 def load_stock():
     if not os.path.exists(STOCK_FILE):
         return {}
@@ -25,9 +22,6 @@ def save_stock(data):
         json.dump(data, f, indent=4)
 
 
-# =========================
-# STOCK MODAL (WITH AI)
-# =========================
 class StockModal(Modal, title="Input Stock"):
     stock_input = TextInput(
         label="Enter Item Name",
@@ -48,49 +42,31 @@ class StockModal(Modal, title="Input Stock"):
         if self.user_id not in data:
             data[self.user_id] = []
 
-        added_items = []
+        result_text = []
 
         for item in items:
-            try:
-                info = await get_item_info(item)  # 🔥 AI CALL
+            info = await get_item_info(item)
 
-                item_data = {
-                    "name": item,
-                    "rarity": info.get("rarity", "Unknown"),
-                    "price": info.get("price", "Unknown")
-                }
+            entry = {
+                "name": item,
+                "rarity": info["rarity"],
+                "price": info["price"]
+            }
 
-                data[self.user_id].append(item_data)
-                added_items.append(item_data)
-
-            except Exception as e:
-                added_items.append({
-                    "name": item,
-                    "rarity": "Error",
-                    "price": "Error"
-                })
+            data[self.user_id].append(entry)
+            result_text.append(f"{item} | {entry['rarity']} | {entry['price']}")
 
         save_stock(data)
 
-        result = "\n".join([
-            f"{i['name']} | {i['rarity']} | {i['price']}"
-            for i in added_items
-        ])
-
         await interaction.followup.send(
-            f"✅ Added:\n```{result}```",
+            f"✅ Added:\n```{chr(10).join(result_text)}```",
             ephemeral=True
         )
 
 
-# =========================
-# TIMER MODAL
-# =========================
+# 🔥 TIMER (TIDAK DIUBAH)
 class TimerModal(Modal, title="Set Timer"):
-    duration = TextInput(
-        label="Timer (seconds)",
-        placeholder="60"
-    )
+    duration = TextInput(label="Timer (seconds)", placeholder="60")
 
     def __init__(self, user_id):
         super().__init__()
@@ -102,19 +78,11 @@ class TimerModal(Modal, title="Set Timer"):
         except:
             return await interaction.response.send_message("❌ Invalid number", ephemeral=True)
 
-        await interaction.response.send_message(
-            f"⏳ Timer started: {seconds}s",
-            ephemeral=True
-        )
-
+        await interaction.response.send_message(f"⏳ Timer started: {seconds}s", ephemeral=True)
         await asyncio.sleep(seconds)
-
         await interaction.followup.send(f"⏰ Time's up <@{self.user_id}>!")
 
 
-# =========================
-# VIEW
-# =========================
 class StockView(View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -136,17 +104,13 @@ class StockView(View):
             for i in data[user_id][:20]
         ])
 
-        await interaction.response.send_message(
-            f"📦 Stock:\n```{stock_list}```",
-            ephemeral=True
-        )
+        await interaction.response.send_message(f"📦 Stock:\n```{stock_list}```", ephemeral=True)
 
     @discord.ui.button(label="Clear Stock", style=discord.ButtonStyle.red)
     async def clear_stock(self, interaction: discord.Interaction, button: Button):
         data = load_stock()
         data[str(interaction.user.id)] = []
         save_stock(data)
-
         await interaction.response.send_message("🗑️ Cleared", ephemeral=True)
 
     @discord.ui.button(label="Set Timer", style=discord.ButtonStyle.gray)
@@ -154,9 +118,6 @@ class StockView(View):
         await interaction.response.send_modal(TimerModal(interaction.user.id))
 
 
-# =========================
-# COG
-# =========================
 class Stock(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
