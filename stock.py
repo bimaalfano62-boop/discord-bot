@@ -3,9 +3,19 @@ from discord.ext import commands, tasks
 import asyncio
 import json
 import time
+import re
+import random
 
 STOCK_FILE = "stock.json"
 
+# =========================
+# EMOJI LIST (RANDOM)
+# =========================
+FRUIT_EMOJIS = ["🍎","🍊","🍇","🍉","🍍","🥭","🍒","🍑","🍓","🥝","🍌","🥥"]
+
+# =========================
+# LOAD & SAVE
+# =========================
 def load_data():
     try:
         with open(STOCK_FILE, "r") as f:
@@ -14,13 +24,51 @@ def load_data():
         return {
             "fruits": [],
             "reset_time": 0,
-            "channel_id": None
+            "channel_id": None,
+            "notified": False
         }
 
 def save_data(data):
     with open(STOCK_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
+# =========================
+# PARSE TIMER
+# =========================
+def parse_time(time_str):
+    time_str = time_str.lower()
+
+    hours = minutes = seconds = 0
+
+    h = re.findall(r'(\d+)\s*(h|jam)', time_str)
+    m = re.findall(r'(\d+)\s*(m|menit)', time_str)
+    s = re.findall(r'(\d+)\s*(s|detik)', time_str)
+
+    if h:
+        hours = int(h[0][0])
+    if m:
+        minutes = int(m[0][0])
+    if s:
+        seconds = int(s[0][0])
+
+    if not (h or m or s):
+        minutes = int(time_str)
+
+    return hours * 3600 + minutes * 60 + seconds
+
+# =========================
+# FORMAT FRUITS WITH EMOJI
+# =========================
+def format_fruits(fruits):
+    result = []
+    for fruit in fruits:
+        emoji = random.choice(FRUIT_EMOJIS)
+        result.append(f"{emoji} {fruit}")
+    return "\n".join(result)
+
+# =========================
+# COG
+# =========================
 class Stock(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -30,13 +78,13 @@ class Stock(commands.Cog):
         self.check_timer.cancel()
 
     # =========================
-    # ADD STOCK + TIMER (1 FLOW)
+    # ADD STOCK
     # =========================
     @commands.command()
     async def addstock(self, ctx):
         data = load_data()
 
-        await ctx.send("🍇 Send fruit names separated by comma\nExample: `Dragon, Leopard, Dough`")
+        await ctx.send("🍇 Send fruit names (comma separated)\nExample: Dragon, Leopard, Dough")
 
         def check(m):
             return m.author == ctx.author and m.channel == ctx.channel
@@ -48,17 +96,23 @@ class Stock(commands.Cog):
             data["fruits"] = fruits
             data["channel_id"] = ctx.channel.id
 
-            await ctx.send("⏳ Now send timer in minutes (example: `30`)")
+            await ctx.send("⏳ Send timer (example: 30m / 1h 20m / 45s)")
 
             msg2 = await self.bot.wait_for("message", timeout=60, check=check)
-            minutes = int(msg2.content)
 
-            reset_time = int(time.time()) + (minutes * 60)
+            total_seconds = parse_time(msg2.content)
+            reset_time = int(time.time()) + total_seconds
+
             data["reset_time"] = reset_time
+            data["notified"] = False
 
             save_data(data)
 
-            await ctx.send(f"✅ Stock set!\nFruits: {', '.join(fruits)}\nTimer: {minutes} minutes")
+            await ctx.send(
+                f"✅ Stock set!\n\n"
+                f"{format_fruits(fruits)}\n\n"
+                f"⏳ Timer: {msg2.content}"
+            )
 
         except asyncio.TimeoutError:
             await ctx.send("❌ You took too long.")
@@ -80,11 +134,14 @@ class Stock(commands.Cog):
             await ctx.send("⚠️ Stock expired.")
             return
 
-        minutes = remaining // 60
+        hours = remaining // 3600
+        minutes = (remaining % 3600) // 60
         seconds = remaining % 60
 
         await ctx.send(
-            f"🍇 **Current Stock:**\n{', '.join(data['fruits'])}\n\n⏳ Reset in: {minutes}m {seconds}s"
+            f"🍇 **Current Stock:**\n\n"
+            f"{format_fruits(data['fruits'])}\n\n"
+            f"⏳ Reset in: {hours}h {minutes}m {seconds}s"
         )
 
     # =========================
@@ -95,20 +152,21 @@ class Stock(commands.Cog):
         await ctx.send(
             "**📘 HOW TO USE STOCK SYSTEM**\n\n"
             "`!addstock`\n"
-            "→ Input fruits (example: Dragon, Dough, Leopard)\n"
-            "→ Input timer (minutes)\n\n"
+            "→ Input fruits (Dragon, Leopard, Dough)\n"
+            "→ Input timer (1h 20m / 30m / 45s)\n\n"
             "`!stock`\n"
-            "→ Show current fruits + countdown timer\n\n"
-            "⚙️ System:\n"
-            "- Timer countdown\n"
-            "- Auto reset after time ends\n"
-            "- ⚠️ Notification before stock reset"
+            "→ Show stock + countdown\n\n"
+            "⚙️ Features:\n"
+            "- Random emoji tiap fruit\n"
+            "- Countdown timer\n"
+            "- Auto reset\n"
+            "- Notification sebelum reset"
         )
 
     # =========================
-    # TIMER LOOP + NOTIF
+    # TIMER LOOP
     # =========================
-    @tasks.loop(seconds=10)
+    @tasks.loop(seconds=5)
     async def check_timer(self):
         data = load_data()
 
@@ -122,14 +180,17 @@ class Stock(commands.Cog):
         if not channel:
             return
 
-        # ⚠️ NOTIFICATION 60 SECONDS BEFORE RESET
-        if 50 <= remaining <= 60:
+        # 🔔 NOTIF 1 MENIT
+        if remaining <= 60 and remaining > 0 and not data.get("notified"):
             await channel.send("⚠️ Stock will reset in **1 minute!**")
+            data["notified"] = True
+            save_data(data)
 
-        # 🔥 RESET STOCK
+        # 🔄 RESET
         if remaining <= 0:
             data["fruits"] = []
             data["reset_time"] = 0
+            data["notified"] = False
             save_data(data)
 
             await channel.send("🔄 Stock has been reset!")
