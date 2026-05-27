@@ -1,84 +1,146 @@
 import discord
 from discord.ext import commands
 import asyncio
+import random
 
 class Stock(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.current_stock = []
+        self.stock_data = {}
         self.timer_task = None
 
     # =========================
-    # 🧠 AMBIL AI
+    # 🧠 TIME PARSER (HH:MM:SS)
     # =========================
-    async def get_ai(self):
-        return self.bot.get_cog("AI")
+    def parse_time(self, time_str: str) -> int:
+        parts = list(map(int, time_str.split(":")))
+
+        if len(parts) == 1:
+            return parts[0]  # seconds
+        elif len(parts) == 2:
+            minutes, seconds = parts
+            return minutes * 60 + seconds
+        elif len(parts) == 3:
+            hours, minutes, seconds = parts
+            return hours * 3600 + minutes * 60 + seconds
+        else:
+            raise ValueError("Invalid time format")
 
     # =========================
-    # ➕ ADD STOCK (PAKE AI)
+    # 🎲 RANDOM EMOJI (BASED ON NAME)
     # =========================
-    @commands.hybrid_command(name="addstock", description="Add fruit to stock")
-    async def addstock(self, ctx, *, fruit: str):
-        ai = await self.get_ai()
+    def get_random_emoji(self, text: str) -> str:
+        emojis = ["🔥","⚡","💀","👀","✨","🧠","💥","🚀","😈","📦","🎯","🌀"]
+        random.seed(text.lower())  # makes it consistent per name
+        return random.choice(emojis)
 
-        if not ai:
-            await ctx.send("❌ AI not loaded")
+    # =========================
+    # ➕ CREATE STOCK
+    # =========================
+    @commands.hybrid_command(name="addstock", description="Create a new stock category")
+    async def addstock(self, ctx, name: str):
+        if name not in self.stock_data:
+            self.stock_data[name] = []
+            await ctx.send(f"✅ Stock `{name}` created!")
+        else:
+            await ctx.send("⚠️ Stock already exists")
+
+    # =========================
+    # 📥 INPUT STOCK ITEMS
+    # =========================
+    @commands.hybrid_command(name="stockin", description="Add items to stock")
+    async def stockin(self, ctx, name: str):
+        if name not in self.stock_data:
+            await ctx.send("❌ Stock not found")
             return
 
-        data = await ai.get_fruit_data(fruit)
+        await ctx.send("📥 Send stock items (type `done` to finish)")
 
-        self.current_stock.append(data)
+        def check(m):
+            return m.author == ctx.author and m.channel == ctx.channel
 
-        embed = discord.Embed(
-            title="✅ Stock Added",
-            description=f"{data['emoji']} **{data['name']}**",
-            color=discord.Color.green()
-        )
+        while True:
+            msg = await self.bot.wait_for("message", check=check)
 
-        embed.add_field(name="Rarity", value=data["rarity"])
-        embed.add_field(name="Price", value=f"${data['price']:,}")
+            if msg.content.lower() == "done":
+                break
 
-        await ctx.send(embed=embed)
+            self.stock_data[name].append(msg.content)
+
+        await ctx.send(f"✅ Stock `{name}` updated!")
 
     # =========================
-    # 📦 SHOW STOCK
+    # 📦 VIEW STOCK COUNT
     # =========================
-    @commands.hybrid_command(name="stock", description="Show current stock")
-    async def stock(self, ctx):
-        if not self.current_stock:
-            await ctx.send("📦 Stock kosong")
+    @commands.hybrid_command(name="stock", description="Check stock amount")
+    async def stock(self, ctx, name: str):
+        if name not in self.stock_data:
+            await ctx.send("❌ Stock not found")
             return
 
-        embed = discord.Embed(
-            title="📦 Current Stock",
-            color=discord.Color.orange()
-        )
+        emoji = self.get_random_emoji(name)
+        amount = len(self.stock_data[name])
 
-        for item in self.current_stock:
-            embed.add_field(
-                name=f"{item['emoji']} {item['name']}",
-                value=f"{item['rarity']} | ${item['price']:,}",
-                inline=False
-            )
-
-        await ctx.send(embed=embed)
+        await ctx.send(f"{emoji} `{name}` available: **{amount}**")
 
     # =========================
-    # ⏱️ TIMER (GAK DIUBAH)
+    # 📤 CLAIM STOCK
     # =========================
-    @commands.hybrid_command(name="settimer", description="Set auto clear stock timer (seconds)")
-    async def settimer(self, ctx, seconds: int):
+    @commands.hybrid_command(name="claim", description="Claim one stock item")
+    async def claim(self, ctx, name: str):
+        if name not in self.stock_data or not self.stock_data[name]:
+            await ctx.send("❌ Stock is empty")
+            return
+
+        item = self.stock_data[name].pop(0)
+
+        try:
+            await ctx.author.send(f"📦 Your `{name}` item:\n{item}")
+            await ctx.send("✅ Check your DM!")
+        except:
+            await ctx.send("❌ Couldn't send DM (are your DMs closed?)")
+
+    # =========================
+    # ⏱️ AUTO CLEAR TIMER
+    # =========================
+    async def stock_timer(self, seconds: int):
+        await asyncio.sleep(seconds)
+        self.stock_data.clear()
+
+        for guild in self.bot.guilds:
+            for channel in guild.text_channels:
+                try:
+                    await channel.send("🧹 Stock has been auto-cleared!")
+                    return
+                except:
+                    continue
+
+    @commands.hybrid_command(name="settimer", description="Set auto-clear timer (HH:MM:SS)")
+    async def settimer(self, ctx, time: str):
+        try:
+            seconds = self.parse_time(time)
+        except:
+            await ctx.send("❌ Invalid format. Use HH:MM:SS / MM:SS / SS")
+            return
+
         if self.timer_task:
             self.timer_task.cancel()
 
-        self.timer_task = self.bot.loop.create_task(self.stock_timer(seconds))
+        self.timer_task = asyncio.create_task(self.stock_timer(seconds))
 
-        await ctx.send(f"⏱️ Timer set ke {seconds} detik")
+        await ctx.send(f"⏱️ Timer set to `{time}` ({seconds} seconds)")
 
-    async def stock_timer(self, seconds):
-        await asyncio.sleep(seconds)
-        self.current_stock.clear()
+    # =========================
+    # 🧹 MANUAL CLEAR
+    # =========================
+    @commands.hybrid_command(name="clearstock", description="Clear all stock")
+    async def clearstock(self, ctx):
+        self.stock_data.clear()
+        await ctx.send("🧹 All stock cleared!")
 
 
+# =========================
+# SETUP
+# =========================
 async def setup(bot):
     await bot.add_cog(Stock(bot))
