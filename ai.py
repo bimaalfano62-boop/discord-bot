@@ -141,6 +141,7 @@ class AI(commands.Cog):
         except:
             return text[:4000]
 
+    # 🔥 IMAGE FUNCTION (DIPAKE LAGI)
     def get_image(self, title):
         try:
             res = requests.get(API, params={
@@ -188,13 +189,22 @@ class AI(commands.Cog):
         formatted = self.ai_format(data)
         pages = self.chunk_text(formatted)
 
+        # 🔥 AMBIL IMAGE
+        image = self.get_image(title)
+
         embeds = []
         for i, p in enumerate(pages):
-            embeds.append(discord.Embed(
+            embed = discord.Embed(
                 title=f"{title} ({i+1}/{len(pages)})",
                 description=p,
                 color=discord.Color.green()
-            ))
+            )
+
+            # 🔥 SET IMAGE (BALIK LAGI)
+            if image:
+                embed.set_image(url=image)
+
+            embeds.append(embed)
 
         await msg.edit(embed=embeds[0], view=WikiView(embeds))
 
