@@ -9,7 +9,6 @@ import difflib
 import random
 from openai import OpenAI
 
-# ================= API =================
 client = OpenAI(
     api_key=os.getenv("GROQ_API_KEY"),
     base_url="https://api.groq.com/openai/v1"
@@ -18,7 +17,6 @@ client = OpenAI(
 API = "https://king-legacy-official.fandom.com/api.php"
 
 
-# ================= PREMIUM LOADING =================
 def segmented_bar(percent: int, segments: int = 12):
     filled = int((percent / 100) * segments)
     empty = segments - filled
@@ -39,7 +37,6 @@ loading_logs = [
 ]
 
 
-# ================= VIEW =================
 class WikiView(discord.ui.View):
     def __init__(self, embeds):
         super().__init__(timeout=180)
@@ -59,21 +56,13 @@ class WikiView(discord.ui.View):
         await interaction.response.edit_message(embed=self.embeds[self.index], view=self)
 
 
-# ================= COG =================
 class AI(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # ================= LOADING =================
     async def fancy_loading(self, interaction, text="Processing..."):
         progress = 0
-
-        embed = discord.Embed(
-            title="🤖 AI Processing...",
-            description="Starting...",
-            color=discord.Color.orange()
-        )
-
+        embed = discord.Embed(title="🤖 AI Processing...", description="Starting...", color=discord.Color.orange())
         msg = await interaction.followup.send(embed=embed)
 
         for i in range(8):
@@ -84,19 +73,9 @@ class AI(commands.Cog):
             bar = segmented_bar(progress)
             log = random.choice(loading_logs)
 
-            if progress < 30:
-                stage = "🔹 Initializing"
-            elif progress < 70:
-                stage = "🔸 Processing"
-            else:
-                stage = "🔶 Finalizing"
+            stage = "🔹 Initializing" if progress < 30 else "🔸 Processing" if progress < 70 else "🔶 Finalizing"
 
-            embed.description = (
-                f"`{bar}` {progress}%\n\n"
-                f"📌 {log}\n"
-                f"🧭 Stage: {stage}"
-            )
-
+            embed.description = f"`{bar}` {progress}%\n\n📌 {log}\n🧭 Stage: {stage}"
             await msg.edit(embed=embed)
             await asyncio.sleep(random.uniform(0.4, 1.0))
 
@@ -105,7 +84,6 @@ class AI(commands.Cog):
 
         return msg
 
-    # ================= SEARCH =================
     def search(self, query):
         try:
             res = requests.get(API, params={
@@ -114,13 +92,11 @@ class AI(commands.Cog):
                 "srsearch": query,
                 "format": "json"
             }).json()
-
             results = res["query"]["search"]
             return results[0]["title"] if results else None
         except:
             return None
 
-    # ================= SUGGESTIONS =================
     def get_suggestions(self, query):
         try:
             res = requests.get(API, params={
@@ -129,13 +105,11 @@ class AI(commands.Cog):
                 "srsearch": query,
                 "format": "json"
             }).json()
-
             titles = [r["title"] for r in res["query"]["search"]]
             return difflib.get_close_matches(query, titles, n=3, cutoff=0.3)
         except:
             return []
 
-    # ================= SCRAPE =================
     def get_data(self, title):
         try:
             res = requests.get(API, params={
@@ -150,8 +124,6 @@ class AI(commands.Cog):
             text = ""
             for tag in soup.find_all(["p", "li", "td", "th"]):
                 t = tag.get_text("\n", strip=True)
-                t = t.replace("<br>", "\n").replace("<br/>", "\n")
-
                 if t:
                     text += t + "\n"
 
@@ -159,7 +131,6 @@ class AI(commands.Cog):
         except:
             return None
 
-    # ================= AI FORMAT =================
     def ai_format(self, text):
         try:
             res = client.responses.create(
@@ -170,7 +141,6 @@ class AI(commands.Cog):
         except:
             return text[:4000]
 
-    # ================= IMAGE =================
     def get_image(self, title):
         try:
             res = requests.get(API, params={
@@ -188,7 +158,6 @@ class AI(commands.Cog):
             pass
         return None
 
-    # ================= SPLIT =================
     def chunk_text(self, text, size=1000):
         chunks = []
         while len(text) > size:
@@ -200,96 +169,49 @@ class AI(commands.Cog):
         chunks.append(text)
         return chunks
 
-    # ================= COMMAND =================
     @app_commands.command(name="wiki", description="Search King Legacy Wiki")
     async def wiki(self, interaction: discord.Interaction, query: str):
         await interaction.response.defer()
-
-        msg = await self.fancy_loading(interaction, "🔍 Searching Wiki...")
+        msg = await self.fancy_loading(interaction)
 
         title = self.search(query)
-
         if not title:
             sug = self.get_suggestions(query)
-
-            embed = discord.Embed(
+            await msg.edit(embed=discord.Embed(
                 title="❌ Not Found",
                 description="\n".join(sug) if sug else "No suggestion",
                 color=discord.Color.red()
-            )
-            await msg.edit(embed=embed)
+            ))
             return
-
-        await msg.edit(embed=discord.Embed(
-            description="📡 Fetching data...",
-            color=discord.Color.orange()
-        ))
 
         data = self.get_data(title)
-
-        if not data:
-            await msg.edit(content="❌ No data")
-            return
-
-        await msg.edit(embed=discord.Embed(
-            description="🧠 AI processing...",
-            color=discord.Color.orange()
-        ))
-
         formatted = self.ai_format(data)
         pages = self.chunk_text(formatted)
 
-        url = f"https://king-legacy-official.fandom.com/wiki/{title.replace(' ', '_')}"
-        img = self.get_image(title)
-
         embeds = []
         for i, p in enumerate(pages):
-            embed = discord.Embed(
+            embeds.append(discord.Embed(
                 title=f"{title} ({i+1}/{len(pages)})",
                 description=p,
-                color=discord.Color.green(),
-                url=url
-            )
-            if img:
-                embed.set_thumbnail(url=img)
-            embeds.append(embed)
+                color=discord.Color.green()
+            ))
 
         await msg.edit(embed=embeds[0], view=WikiView(embeds))
 
     @app_commands.command(name="help", description="How to use the bot")
     async def help(self, interaction: discord.Interaction):
         await interaction.response.defer()
+        msg = await self.fancy_loading(interaction)
 
-        msg = await self.fancy_loading(interaction, "📘 Opening help menu...")
-        await asyncio.sleep(0.5)
-
-        embed = discord.Embed(
-            title="📘 Help",
-            description="How to use /wiki",
-            color=discord.Color.blue()
-        )
-
-        embed.add_field(
-            name="✅ Correct",
-            value="/wiki Dragon Fruit\n/wiki Shark Blade",
-            inline=False
-        )
-
-        embed.add_field(
-            name="❌ Wrong",
-            value="/wiki dragon\n/wiki fruit",
-            inline=False
-        )
-
-        embed.add_field(
-            name="💡 Tips",
-            value="Use full names, no abbreviations",
-            inline=False
-        )
+        embed = discord.Embed(title="📘 Help", description="How to use /wiki", color=discord.Color.blue())
+        embed.add_field(name="✅ Correct", value="/wiki Dragon Fruit\n/wiki Shark Blade", inline=False)
+        embed.add_field(name="❌ Wrong", value="/wiki dragon\n/wiki fruit", inline=False)
+        embed.add_field(name="💡 Tips", value="Use full names", inline=False)
 
         await msg.edit(embed=embed)
 
-# ================= 🔥 TAMBAHAN (INI DOANG YANG BARU) =================
+
+# 🔥 CORE AI FUNCTION (ASYNC)
 async def get_item_info(name: str):
     loop = asyncio.get_event_loop()
 
@@ -341,5 +263,3 @@ async def get_item_info(name: str):
 
 async def setup(bot):
     await bot.add_cog(AI(bot))
-
-
