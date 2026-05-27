@@ -4,7 +4,7 @@ from discord.ui import View, Button, Select, Modal, TextInput
 import requests
 from bs4 import BeautifulSoup
 
-# ================= FETCH DATA FROM WIKI =================
+# ================= SCRAPER =================
 def fetch_fruits():
     url = "https://king-legacy-official.fandom.com/wiki/Legacy_Fruits"
     res = requests.get(url)
@@ -12,7 +12,7 @@ def fetch_fruits():
     fruits = {}
 
     if res.status_code != 200:
-        print("❌ Failed to fetch fruit data")
+        print("❌ Failed to fetch wiki")
         return fruits
 
     soup = BeautifulSoup(res.text, "html.parser")
@@ -47,7 +47,11 @@ class StockCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.stock = {}
-        self.timer = 60
+
+        # ✅ FIX TIMER SYSTEM
+        self.default_timer = 60
+        self.timer = self.default_timer
+
         self.reset_task.start()
 
     def cog_unload(self):
@@ -57,12 +61,15 @@ class StockCog(commands.Cog):
     @tasks.loop(minutes=1)
     async def reset_task(self):
         self.timer -= 1
+
         if self.timer <= 0:
             self.stock.clear()
             print("🔥 STOCK RESET")
-            self.timer = 60
 
-    # ================= MAIN UI =================
+            # reset to last set timer
+            self.timer = self.default_timer
+
+    # ================= UI =================
     class MainView(View):
         def __init__(self, cog):
             super().__init__(timeout=None)
@@ -71,7 +78,7 @@ class StockCog(commands.Cog):
         @discord.ui.button(label="➕ Input Stock", style=discord.ButtonStyle.green)
         async def input_stock(self, interaction: discord.Interaction, button: Button):
             await interaction.response.send_message(
-                "Select a fruit:",
+                "Select fruit:",
                 view=StockCog.FruitSelect(self.cog),
                 ephemeral=True
             )
@@ -90,9 +97,11 @@ class StockCog(commands.Cog):
                 data = FRUITS.get(fruit, {})
                 msg += f"**{fruit}** | {data.get('rarity')} | {data.get('price')} | Qty: {qty}\n"
 
+            msg += f"\n⏱ Reset in: {self.cog.timer} min"
+
             await interaction.response.send_message(msg, ephemeral=True)
 
-    # ================= FRUIT SELECT =================
+    # ================= SELECT =================
     class FruitSelect(View):
         def __init__(self, cog):
             super().__init__(timeout=60)
@@ -102,7 +111,7 @@ class StockCog(commands.Cog):
 
             options = [
                 discord.SelectOption(label=name[:100])
-                for name in fruit_names[:25]
+                for name in fruit_names[:25]  # discord limit
             ]
 
             self.add_item(StockCog.FruitDropdown(cog, options))
@@ -116,14 +125,14 @@ class StockCog(commands.Cog):
             fruit = self.values[0]
             await interaction.response.send_modal(StockCog.StockModal(self.cog, fruit))
 
-    # ================= MODALS =================
+    # ================= MODAL =================
     class StockModal(Modal, title="Input Stock"):
         def __init__(self, cog, fruit):
             super().__init__()
             self.cog = cog
             self.fruit = fruit
 
-            self.amount = TextInput(label="Quantity", placeholder="Example: 5")
+            self.amount = TextInput(label="Amount", placeholder="example: 5")
             self.add_item(self.amount)
 
         async def on_submit(self, interaction: discord.Interaction):
@@ -132,7 +141,7 @@ class StockCog(commands.Cog):
                 self.cog.stock[self.fruit] = qty
 
                 await interaction.response.send_message(
-                    f"✅ {self.fruit} set to {qty}",
+                    f"✅ {self.fruit} = {qty}",
                     ephemeral=True
                 )
             except:
@@ -143,14 +152,18 @@ class StockCog(commands.Cog):
             super().__init__()
             self.cog = cog
 
-            self.time = TextInput(label="Minutes", placeholder="Example: 30")
+            self.time = TextInput(label="Minutes", placeholder="example: 30")
             self.add_item(self.time)
 
         async def on_submit(self, interaction: discord.Interaction):
             try:
-                self.cog.timer = int(self.time.value)
+                new_time = int(self.time.value)
+
+                self.cog.timer = new_time
+                self.cog.default_timer = new_time  # ✅ IMPORTANT
+
                 await interaction.response.send_message(
-                    f"⏱ Timer set to {self.cog.timer} minutes",
+                    f"⏱ Timer set to {new_time} minutes",
                     ephemeral=True
                 )
             except:
