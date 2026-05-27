@@ -4,7 +4,7 @@ from discord.ui import View, Button, Select, Modal, TextInput
 import requests
 from bs4 import BeautifulSoup
 
-# ================= SCRAPER =================
+# ================= FETCH DATA FROM WIKI =================
 def fetch_fruits():
     url = "https://king-legacy-official.fandom.com/wiki/Legacy_Fruits"
     res = requests.get(url)
@@ -12,7 +12,7 @@ def fetch_fruits():
     fruits = {}
 
     if res.status_code != 200:
-        print("❌ Gagal ambil data wiki")
+        print("❌ Failed to fetch fruit data")
         return fruits
 
     soup = BeautifulSoup(res.text, "html.parser")
@@ -53,7 +53,7 @@ class StockCog(commands.Cog):
     def cog_unload(self):
         self.reset_task.cancel()
 
-    # ================= TIMER =================
+    # ================= GLOBAL TIMER =================
     @tasks.loop(minutes=1)
     async def reset_task(self):
         self.timer -= 1
@@ -62,7 +62,7 @@ class StockCog(commands.Cog):
             print("🔥 STOCK RESET")
             self.timer = 60
 
-    # ================= UI =================
+    # ================= MAIN UI =================
     class MainView(View):
         def __init__(self, cog):
             super().__init__(timeout=None)
@@ -71,7 +71,7 @@ class StockCog(commands.Cog):
         @discord.ui.button(label="➕ Input Stock", style=discord.ButtonStyle.green)
         async def input_stock(self, interaction: discord.Interaction, button: Button):
             await interaction.response.send_message(
-                "Pilih buah:",
+                "Select a fruit:",
                 view=StockCog.FruitSelect(self.cog),
                 ephemeral=True
             )
@@ -80,10 +80,10 @@ class StockCog(commands.Cog):
         async def set_timer(self, interaction: discord.Interaction, button: Button):
             await interaction.response.send_modal(StockCog.TimerModal(self.cog))
 
-        @discord.ui.button(label="📦 Lihat Stock", style=discord.ButtonStyle.gray)
+        @discord.ui.button(label="📦 View Stock", style=discord.ButtonStyle.gray)
         async def view_stock(self, interaction: discord.Interaction, button: Button):
             if not self.cog.stock:
-                return await interaction.response.send_message("Stock kosong", ephemeral=True)
+                return await interaction.response.send_message("Stock is empty", ephemeral=True)
 
             msg = ""
             for fruit, qty in self.cog.stock.items():
@@ -92,7 +92,7 @@ class StockCog(commands.Cog):
 
             await interaction.response.send_message(msg, ephemeral=True)
 
-    # ================= SELECT =================
+    # ================= FRUIT SELECT =================
     class FruitSelect(View):
         def __init__(self, cog):
             super().__init__(timeout=60)
@@ -109,21 +109,21 @@ class StockCog(commands.Cog):
 
     class FruitDropdown(Select):
         def __init__(self, cog, options):
-            super().__init__(placeholder="Pilih buah", options=options)
+            super().__init__(placeholder="Choose fruit", options=options)
             self.cog = cog
 
         async def callback(self, interaction: discord.Interaction):
             fruit = self.values[0]
             await interaction.response.send_modal(StockCog.StockModal(self.cog, fruit))
 
-    # ================= MODAL =================
+    # ================= MODALS =================
     class StockModal(Modal, title="Input Stock"):
         def __init__(self, cog, fruit):
             super().__init__()
             self.cog = cog
             self.fruit = fruit
 
-            self.amount = TextInput(label="Jumlah", placeholder="contoh: 5")
+            self.amount = TextInput(label="Quantity", placeholder="Example: 5")
             self.add_item(self.amount)
 
         async def on_submit(self, interaction: discord.Interaction):
@@ -132,29 +132,29 @@ class StockCog(commands.Cog):
                 self.cog.stock[self.fruit] = qty
 
                 await interaction.response.send_message(
-                    f"✅ {self.fruit} = {qty}",
+                    f"✅ {self.fruit} set to {qty}",
                     ephemeral=True
                 )
             except:
-                await interaction.response.send_message("❌ Harus angka", ephemeral=True)
+                await interaction.response.send_message("❌ Must be a number", ephemeral=True)
 
-    class TimerModal(Modal, title="Set Timer (menit)"):
+    class TimerModal(Modal, title="Set Timer (minutes)"):
         def __init__(self, cog):
             super().__init__()
             self.cog = cog
 
-            self.time = TextInput(label="Menit", placeholder="contoh: 30")
+            self.time = TextInput(label="Minutes", placeholder="Example: 30")
             self.add_item(self.time)
 
         async def on_submit(self, interaction: discord.Interaction):
             try:
                 self.cog.timer = int(self.time.value)
                 await interaction.response.send_message(
-                    f"⏱ Timer set ke {self.cog.timer} menit",
+                    f"⏱ Timer set to {self.cog.timer} minutes",
                     ephemeral=True
                 )
             except:
-                await interaction.response.send_message("❌ Harus angka", ephemeral=True)
+                await interaction.response.send_message("❌ Must be a number", ephemeral=True)
 
     # ================= COMMAND =================
     @commands.command()
