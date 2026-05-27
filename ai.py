@@ -289,6 +289,57 @@ class AI(commands.Cog):
 
         await msg.edit(embed=embed)
 
+# ================= 🔥 TAMBAHAN (INI DOANG YANG BARU) =================
+async def get_item_info(name: str):
+    loop = asyncio.get_event_loop()
+
+    def fetch():
+        try:
+            res = requests.get(API, params={
+                "action": "query",
+                "list": "search",
+                "srsearch": name,
+                "format": "json"
+            }).json()
+
+            results = res["query"]["search"]
+            if not results:
+                return {"rarity": "Unknown", "price": "Unknown"}
+
+            title = results[0]["title"]
+
+            res2 = requests.get(API, params={
+                "action": "parse",
+                "page": title,
+                "prop": "text",
+                "format": "json"
+            }).json()
+
+            soup = BeautifulSoup(res2["parse"]["text"]["*"], "html.parser")
+            text = soup.get_text(" ", strip=True).lower()
+
+            rarity = "Unknown"
+            price = "Unknown"
+
+            for r in ["common", "uncommon", "rare", "epic", "legendary", "mythical"]:
+                if r in text:
+                    rarity = r.capitalize()
+                    break
+
+            import re
+            match = re.search(r'(\d+[.,]?\d*\s?[mb])', text)
+            if match:
+                price = match.group(1).upper()
+
+            return {"rarity": rarity, "price": price}
+
+        except:
+            return {"rarity": "Unknown", "price": "Unknown"}
+
+    return await loop.run_in_executor(None, fetch)
+
 
 async def setup(bot):
     await bot.add_cog(AI(bot))
+
+
