@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 import os
 import asyncio
 import difflib
+import random
 from openai import OpenAI
 
 # ================= API =================
@@ -15,6 +16,27 @@ client = OpenAI(
 )
 
 API = "https://king-legacy-official.fandom.com/api.php"
+
+
+# ================= PREMIUM LOADING =================
+def segmented_bar(percent: int, segments: int = 12):
+    filled = int((percent / 100) * segments)
+    empty = segments - filled
+    return "▰" * filled + "▱" * empty
+
+
+loading_logs = [
+    "🔍 Scanning data...",
+    "🧠 Initializing AI...",
+    "📡 Syncing server...",
+    "⚙️ Loading modules...",
+    "📊 Processing info...",
+    "🛰️ Fetching wiki...",
+    "💾 Parsing content...",
+    "🚀 Optimizing output...",
+    "🔐 Securing response...",
+    "🧬 Finalizing..."
+]
 
 
 # ================= VIEW =================
@@ -42,17 +64,48 @@ class AI(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # ================= LOADING GLOBAL =================
+    # ================= LOADING =================
     async def fancy_loading(self, interaction, text="Processing..."):
+        progress = 0
+
         embed = discord.Embed(
-            title="⚡ Please wait...",
-            description=f"```{text}```",
+            title="🤖 AI Processing...",
+            description="Starting...",
             color=discord.Color.orange()
         )
+
         msg = await interaction.followup.send(embed=embed)
+
+        for i in range(8):
+            progress += random.randint(8, 18)
+            if progress > 100:
+                progress = 100
+
+            bar = segmented_bar(progress)
+            log = random.choice(loading_logs)
+
+            if progress < 30:
+                stage = "🔹 Initializing"
+            elif progress < 70:
+                stage = "🔸 Processing"
+            else:
+                stage = "🔶 Finalizing"
+
+            embed.description = (
+                f"`{bar}` {progress}%\n\n"
+                f"📌 {log}\n"
+                f"🧭 Stage: {stage}"
+            )
+
+            await msg.edit(embed=embed)
+            await asyncio.sleep(random.uniform(0.4, 1.0))
+
+            if progress >= 100:
+                break
+
         return msg
 
-    # SEARCH
+    # ================= SEARCH =================
     def search(self, query):
         try:
             res = requests.get(API, params={
@@ -67,7 +120,7 @@ class AI(commands.Cog):
         except:
             return None
 
-    # SUGGESTIONS
+    # ================= SUGGESTIONS =================
     def get_suggestions(self, query):
         try:
             res = requests.get(API, params={
@@ -82,7 +135,7 @@ class AI(commands.Cog):
         except:
             return []
 
-    # SCRAPE
+    # ================= SCRAPE =================
     def get_data(self, title):
         try:
             res = requests.get(API, params={
@@ -106,7 +159,7 @@ class AI(commands.Cog):
         except:
             return None
 
-    # AI FORMAT
+    # ================= AI FORMAT =================
     def ai_format(self, text):
         try:
             res = client.responses.create(
@@ -117,7 +170,7 @@ class AI(commands.Cog):
         except:
             return text[:4000]
 
-    # IMAGE
+    # ================= IMAGE =================
     def get_image(self, title):
         try:
             res = requests.get(API, params={
@@ -135,7 +188,7 @@ class AI(commands.Cog):
             pass
         return None
 
-    # SPLIT TEXT
+    # ================= SPLIT =================
     def chunk_text(self, text, size=1000):
         chunks = []
         while len(text) > size:
@@ -148,7 +201,6 @@ class AI(commands.Cog):
         return chunks
 
     # ================= COMMAND =================
-
     @app_commands.command(name="wiki", description="Search King Legacy Wiki")
     async def wiki(self, interaction: discord.Interaction, query: str):
         await interaction.response.defer()
@@ -185,7 +237,6 @@ class AI(commands.Cog):
         ))
 
         formatted = self.ai_format(data)
-
         pages = self.chunk_text(formatted)
 
         url = f"https://king-legacy-official.fandom.com/wiki/{title.replace(' ', '_')}"
