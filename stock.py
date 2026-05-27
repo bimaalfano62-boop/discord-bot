@@ -1,185 +1,137 @@
 import discord
-from discord.ext import commands, tasks
-from discord.ui import View, Button, Select, Modal, TextInput
-import requests
-from bs4 import BeautifulSoup
+from discord.ext import commands
+from discord.ui import View, Button, Modal, TextInput
+import json
+import os
 
-# ================= SCRAPER =================
-def fetch_fruits():
-    url = "https://king-legacy-official.fandom.com/wiki/Legacy_Fruits"
-    res = requests.get(url)
-
-    fruits = {}
-
-    if res.status_code != 200:
-        print("❌ Failed to fetch wiki")
-        return fruits
-
-    soup = BeautifulSoup(res.text, "html.parser")
-    tables = soup.find_all("table")
-
-    for table in tables:
-        rows = table.find_all("tr")[1:]
-
-        for row in rows:
-            cols = row.find_all("td")
-            if len(cols) < 3:
-                continue
-
-            name = cols[0].text.strip()
-            rarity = cols[1].text.strip()
-            price = cols[2].text.strip()
-
-            if name:
-                fruits[name] = {
-                    "rarity": rarity,
-                    "price": price
-                }
-
-    print(f"✅ Loaded {len(fruits)} fruits")
-    return fruits
+STOCK_FILE = "stock.json"
 
 
-FRUITS = fetch_fruits()
+# =========================
+# DATA HANDLER
+# =========================
+def load_stock():
+    if not os.path.exists(STOCK_FILE):
+        return {}
+    with open(STOCK_FILE, "r") as f:
+        return json.load(f)
 
-# ================= COG =================
-class StockCog(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
-        self.stock = {}
 
-        # TIMER SYSTEM
-        self.default_timer = 60
-        self.timer = self.default_timer
+def save_stock(data):
+    with open(STOCK_FILE, "w") as f:
+        json.dump(data, f, indent=4)
 
-        self.reset_task.start()
 
-    def cog_unload(self):
-        self.reset_task.cancel()
+# =========================
+# MODAL (POPUP INPUT)
+# =========================
+class StockModal(Modal, title="Input Stock"):
+    stock_input = TextInput(
+        label="Enter Stock",
+        placeholder="example: acc1:pass1, acc2:pass2",
+        style=discord.TextStyle.paragraph,
+        required=True
+    )
 
-    # ================= TIMER =================
-    @tasks.loop(minutes=1)
-    async def reset_task(self):
-        self.timer -= 1
+    def __init__(self, user_id):
+        super().__init__()
+        self.user_id = str(user_id)
 
-        if self.timer <= 0:
-            self.stock.clear()
-            print("🔥 STOCK RESET")
+    async def on_submit(self, interaction: discord.Interaction):
+        data = load_stock()
 
-            self.timer = self.default_timer
+        items = [i.strip() for i in self.stock_input.value.split(",") if i.strip()]
 
-    # ================= MAIN UI =================
-    class MainView(View):
-        def __init__(self, cog):
-            super().__init__(timeout=None)
-            self.cog = cog
+        if self.user_id not in data:
+            data[self.user_id] = []
 
-        @discord.ui.button(label="➕ Input Stock", style=discord.ButtonStyle.green)
-        async def input_stock(self, interaction: discord.Interaction, button: Button):
-            await interaction.response.send_message(
-                "Select fruit:",
-                view=StockCog.FruitSelectView(self.cog),
+        data[self.user_id].extend(items)
+        save_stock(data)
+
+        await interaction.response.send_message(
+            f"✅ Successfully added **{len(items)} stock(s)**",
+            ephemeral=True
+        )
+
+
+# =========================
+# BUTTON VIEW
+# =========================
+class StockView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="Input Stock",
+        style=discord.ButtonStyle.green,
+        custom_id="input_stock_btn"
+    )
+    async def input_stock(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.send_modal(
+            StockModal(interaction.user.id)
+        )
+
+    @discord.ui.button(
+        label="View Stock",
+        style=discord.ButtonStyle.blurple,
+        custom_id="view_stock_btn"
+    )
+    async def view_stock(self, interaction: discord.Interaction, button: Button):
+        data = load_stock()
+        user_id = str(interaction.user.id)
+
+        if user_id not in data or not data[user_id]:
+            return await interaction.response.send_message(
+                "❌ You don't have any stock",
                 ephemeral=True
             )
 
-        @discord.ui.button(label="⏱ Set Timer", style=discord.ButtonStyle.blurple)
-        async def set_timer(self, interaction: discord.Interaction, button: Button):
-            await interaction.response.send_modal(StockCog.TimerModal(self.cog))
+        stock_list = "\n".join(data[user_id][:20])
 
-        @discord.ui.button(label="📦 View Stock", style=discord.ButtonStyle.gray)
-        async def view_stock(self, interaction: discord.Interaction, button: Button):
-            if not self.cog.stock:
-                return await interaction.response.send_message("Stock is empty", ephemeral=True)
+        await interaction.response.send_message(
+            f"📦 **Your Stock:**\n```{stock_list}```",
+            ephemeral=True
+        )
 
-            msg = ""
-            for fruit, qty in self.cog.stock.items():
-                data = FRUITS.get(fruit, {})
-                msg += f"**{fruit}** | {data.get('rarity')} | {data.get('price')} | Qty: {qty}\n"
+    @discord.ui.button(
+        label="Clear Stock",
+        style=discord.ButtonStyle.red,
+        custom_id="clear_stock_btn"
+    )
+    async def clear_stock(self, interaction: discord.Interaction, button: Button):
+        data = load_stock()
+        user_id = str(interaction.user.id)
 
-            msg += f"\n⏱ Reset in: {self.cog.timer} min"
+        if user_id in data:
+            data[user_id] = []
+            save_stock(data)
 
-            await interaction.response.send_message(msg, ephemeral=True)
+        await interaction.response.send_message(
+            "🗑️ Your stock has been cleared",
+            ephemeral=True
+        )
 
-    # ================= SELECT VIEW (FIXED) =================
-    class FruitSelectView(View):
-        def __init__(self, cog):
-            super().__init__(timeout=60)
-            self.cog = cog
 
-            fruit_names = list(FRUITS.keys())
+# =========================
+# COG
+# =========================
+class Stock(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
 
-            options = [
-                discord.SelectOption(label=name[:100])
-                for name in fruit_names[:25]
-            ]
-
-            self.add_item(StockCog.FruitDropdown(cog, options))
-
-    class FruitDropdown(Select):
-        def __init__(self, cog, options):
-            super().__init__(placeholder="Choose fruit", options=options)
-            self.cog = cog
-
-        async def callback(self, interaction: discord.Interaction):
-            fruit = self.values[0]
-
-            # 🔥 FIX: prevent interaction failed
-            await interaction.response.defer(ephemeral=True)
-
-            await interaction.followup.send_modal(
-                StockCog.StockModal(self.cog, fruit)
-            )
-
-    # ================= MODALS =================
-    class StockModal(Modal, title="Input Stock"):
-        def __init__(self, cog, fruit):
-            super().__init__()
-            self.cog = cog
-            self.fruit = fruit
-
-            self.amount = TextInput(label="Amount", placeholder="example: 5")
-            self.add_item(self.amount)
-
-        async def on_submit(self, interaction: discord.Interaction):
-            try:
-                qty = int(self.amount.value)
-                self.cog.stock[self.fruit] = qty
-
-                await interaction.response.send_message(
-                    f"✅ {self.fruit} = {qty}",
-                    ephemeral=True
-                )
-            except:
-                await interaction.response.send_message("❌ Must be a number", ephemeral=True)
-
-    class TimerModal(Modal, title="Set Timer (minutes)"):
-        def __init__(self, cog):
-            super().__init__()
-            self.cog = cog
-
-            self.time = TextInput(label="Minutes", placeholder="example: 30")
-            self.add_item(self.time)
-
-        async def on_submit(self, interaction: discord.Interaction):
-            try:
-                new_time = int(self.time.value)
-
-                self.cog.timer = new_time
-                self.cog.default_timer = new_time
-
-                await interaction.response.send_message(
-                    f"⏱ Timer set to {new_time} minutes",
-                    ephemeral=True
-                )
-            except:
-                await interaction.response.send_message("❌ Must be a number", ephemeral=True)
-
-    # ================= COMMAND =================
     @commands.command()
     async def stock(self, ctx):
-        await ctx.send("📊 Stock Dashboard", view=self.MainView(self))
+        embed = discord.Embed(
+            title="📦 Stock Dashboard",
+            description="Manage your stock using buttons below",
+            color=discord.Color.green()
+        )
+
+        await ctx.send(embed=embed, view=StockView())
 
 
-# ================= SETUP =================
+# =========================
+# SETUP
+# =========================
 async def setup(bot):
-    await bot.add_cog(StockCog(bot))
+    await bot.add_cog(Stock(bot))
