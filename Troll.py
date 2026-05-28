@@ -1,4 +1,4 @@
-# Troll.py — diubah jadi Cog
+# Troll.py
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -21,27 +21,35 @@ def save_config(data):
 # =========================
 # SETUP UI
 # =========================
+class MonitorSelect(discord.ui.ChannelSelect):
+    def __init__(self):
+        super().__init__(
+            placeholder="Select Monitor Channel",
+            channel_types=[discord.ChannelType.text]
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        self.view.monitor_channel = self.values[0].id
+        await interaction.response.send_message(f"✅ Monitor: <#{self.view.monitor_channel}>", ephemeral=True)
+
+class DashboardSelect(discord.ui.ChannelSelect):
+    def __init__(self):
+        super().__init__(
+            placeholder="Select Dashboard Channel",
+            channel_types=[discord.ChannelType.text]
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        self.view.dashboard_channel = self.values[0].id
+        await interaction.response.send_message(f"✅ Dashboard: <#{self.view.dashboard_channel}>", ephemeral=True)
+
 class SetupView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
         self.monitor_channel = None
         self.dashboard_channel = None
-
-    @discord.ui.channel_select(
-        placeholder="Select Monitor Channel",
-        channel_types=[discord.ChannelType.text]
-    )
-    async def monitor_select(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
-        self.monitor_channel = select.values[0].id
-        await interaction.response.send_message(f"✅ Monitor: <#{self.monitor_channel}>", ephemeral=True)
-
-    @discord.ui.channel_select(
-        placeholder="Select Dashboard Channel",
-        channel_types=[discord.ChannelType.text]
-    )
-    async def dashboard_select(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
-        self.dashboard_channel = select.values[0].id
-        await interaction.response.send_message(f"✅ Dashboard: <#{self.dashboard_channel}>", ephemeral=True)
+        self.add_item(MonitorSelect())
+        self.add_item(DashboardSelect())
 
     @discord.ui.button(label="Save", style=discord.ButtonStyle.green)
     async def save(self, interaction: discord.Interaction, button: discord.ui.Button):
