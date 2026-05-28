@@ -1,20 +1,12 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from discord.ui import View, Button, Modal, TextInput, ChannelSelect
 import json
-import time
+import datetime
 import os
 
-# =========================
-# TOKEN (ENV)
-# =========================
-TOKEN = os.getenv("DISCORD_TOKEN")
+TOKEN = "DISCORD_TOKEN"
 
-if not TOKEN:
-    raise ValueError("DISCORD_TOKEN belum di set!")
-
-DATA_FILE = "data.json"
 CONFIG_FILE = "config.json"
 
 intents = discord.Intents.default()
@@ -23,123 +15,106 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # =========================
-# UTIL
+# CONFIG
 # =========================
-def load_json(file, default):
-    if not os.path.exists(file):
-        return default
-    with open(file, "r") as f:
+
+def load_config():
+    if not os.path.exists(CONFIG_FILE):
+        return {}
+    with open(CONFIG_FILE, "r") as f:
         return json.load(f)
 
-def save_json(file, data):
-    with open(file, "w") as f:
+def save_config(data):
+    with open(CONFIG_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-data_db = load_json(DATA_FILE, {})
-config = load_json(CONFIG_FILE, {})
-
 # =========================
-# SETUP UI (TIDAK BERUBAH)
+# SETUP UI
 # =========================
-class SetupView(View):
+
+class SetupView(discord.ui.View):
     def __init__(self):
-        super().__init__(timeout=60)
-        self.monitor = None
-        self.dashboard = None
+        super().__init__(timeout=None)
+        self.monitor_channel = None
+        self.dashboard_channel = None
 
-        self.add_item(ChannelPicker("Pilih Channel Monitor", "monitor"))
-        self.add_item(ChannelPicker("Pilih Channel Dashboard", "dashboard"))
+    @discord.ui.channel_select(
+        placeholder="Pilih Channel Monitor",
+        channel_types=[discord.ChannelType.text]
+    )
+    async def monitor_select(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
+        self.monitor_channel = select.values[0].id
+        await interaction.response.send_message(f"✅ Monitor: <#{self.monitor_channel}>", ephemeral=True)
 
-class ChannelPicker(ChannelSelect):
-    def __init__(self, placeholder, mode):
-        super().__init__(placeholder=placeholder, min_values=1, max_values=1)
-        self.mode = mode
+    @discord.ui.channel_select(
+        placeholder="Pilih Channel Dashboard",
+        channel_types=[discord.ChannelType.text]
+    )
+    async def dashboard_select(self, interaction: discord.Interaction, select: discord.ui.ChannelSelect):
+        self.dashboard_channel = select.values[0].id
+        await interaction.response.send_message(f"✅ Dashboard: <#{self.dashboard_channel}>", ephemeral=True)
 
-    async def callback(self, interaction):
-        channel = self.values[0]
-        view = self.view
-
-        if self.mode == "monitor":
-            view.monitor = channel.id
-        else:
-            view.dashboard = channel.id
-
-        await interaction.response.send_message(
-            f"✅ {self.mode} set ke {channel.mention}",
-            ephemeral=True
-        )
-
-class SaveButton(Button):
-    def __init__(self):
-        super().__init__(label="Save", style=discord.ButtonStyle.green)
-
-    async def callback(self, interaction):
-        view = self.view
-
-        if not view.monitor or not view.dashboard:
-            await interaction.response.send_message(
-                "❌ Pilih semua channel dulu", ephemeral=True
-            )
+    @discord.ui.button(label="Save", style=discord.ButtonStyle.green)
+    async def save(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self.monitor_channel or not self.dashboard_channel:
+            await interaction.response.send_message("❌ Pilih semua dulu!", ephemeral=True)
             return
 
+        config = load_config()
         config[str(interaction.guild.id)] = {
-            "monitor": view.monitor,
-            "dashboard": view.dashboard
+            "monitor": self.monitor_channel,
+            "dashboard": self.dashboard_channel
         }
+        save_config(config)
 
-        save_json(CONFIG_FILE, config)
-
-        await interaction.response.send_message(
-            "✅ Setup berhasil!", ephemeral=True
-        )
+        await interaction.response.send_message("🔥 Setup berhasil!", ephemeral=True)
 
 # =========================
-# REPLY SYSTEM
+# REPLY UI
 # =========================
-class ReplyModal(Modal, title="Balas Pesan"):
+
+class ReplyModal(discord.ui.Modal, title="Balas Pesan"):
+    reply = discord.ui.TextInput(label="Isi balasan", style=discord.TextStyle.paragraph)
+
     def __init__(self, message_id, channel_id):
         super().__init__()
         self.message_id = message_id
         self.channel_id = channel_id
 
-        self.reply_text = TextInput(label="Balasan", style=discord.TextStyle.long)
-        self.add_item(self.reply_text)
+    async def on_submit(self, interaction: discord.Interaction):
+        channel = bot.get_channel(self.channel_id)
+        try:
+            msg = await channel.fetch_message(self.message_id)
+            await msg.reply(self.reply.value)
+            await interaction.response.send_message("✅ Terkirim!", ephemeral=True)
+        except:
+            await interaction.response.send_message("❌ Gagal kirim!", ephemeral=True)
 
-    async def on_submit(self, interaction):
-        channel = interaction.client.get_channel(self.channel_id)
-        msg = await channel.fetch_message(self.message_id)
-
-        await msg.reply(self.reply_text.value)
-
-        await interaction.response.send_message("✅ Terkirim", ephemeral=True)
-
-class ReplyButton(Button):
+class ReplyView(discord.ui.View):
     def __init__(self, message_id, channel_id):
-        super().__init__(label="Reply", style=discord.ButtonStyle.primary)
+        super().__init__(timeout=None)
         self.message_id = message_id
         self.channel_id = channel_id
 
-    async def callback(self, interaction):
-        await interaction.response.send_modal(
-            ReplyModal(self.message_id, self.channel_id)
-        )
-
-class ReplyView(View):
-    def __init__(self, message_id, channel_id):
-        super().__init__(timeout=None)
-        self.add_item(ReplyButton(message_id, channel_id))
+    @discord.ui.button(label="Reply", style=discord.ButtonStyle.blurple)
+    async def reply_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(ReplyModal(self.message_id, self.channel_id))
 
 # =========================
-# EVENTS
+# COMMAND
 # =========================
-@bot.event
-async def on_ready():
-    print(f"Login sebagai {bot.user}")
-    try:
-        synced = await bot.tree.sync()
-        print(f"Slash command sync: {len(synced)}")
-    except Exception as e:
-        print(e)
+
+@bot.tree.command(name="setup", description="Setup bot")
+async def setup(interaction: discord.Interaction):
+    await interaction.response.send_message(
+        "⚙️ Pilih channel:",
+        view=SetupView(),
+        ephemeral=True
+    )
+
+# =========================
+# MONITOR MESSAGE
+# =========================
 
 @bot.event
 async def on_message(message):
@@ -149,7 +124,9 @@ async def on_message(message):
     if not message.guild:
         return
 
+    config = load_config()
     guild_id = str(message.guild.id)
+
     if guild_id not in config:
         return
 
@@ -159,63 +136,40 @@ async def on_message(message):
     if message.channel.id != monitor_id:
         return
 
-    # SAVE DATA
-    data_db[str(message.id)] = {
-        "user": str(message.author),
-        "user_id": message.author.id,
-        "content": message.content,
-        "time": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "channel_id": message.channel.id
-    }
-
-    save_json(DATA_FILE, data_db)
-
-    # SEND TO DASHBOARD
     dashboard = bot.get_channel(dashboard_id)
-    if not dashboard:
-        return
 
-    view = ReplyView(message.id, message.channel.id)
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    embed = discord.Embed(
+        title="📩 Pesan Masuk",
+        color=0x00ffff,
+        timestamp=datetime.datetime.now()
+    )
+
+    embed.add_field(name="👤 User", value=message.author.mention, inline=False)
+    embed.add_field(name="💬 Pesan", value=message.content or "-", inline=False)
+    embed.add_field(name="📍 Channel", value=message.channel.mention, inline=False)
+    embed.add_field(name="⏰ Waktu", value=now, inline=False)
+
+    embed.set_footer(text=f"Message ID: {message.id}")
 
     await dashboard.send(
-        f"📩 **Pesan Baru**\n"
-        f"👤 {message.author}\n"
-        f"💬 {message.content}\n"
-        f"⏰ {data_db[str(message.id)]['time']}",
-        view=view
+        embed=embed,
+        view=ReplyView(message.id, message.channel.id)
     )
 
-    await bot.process_commands(message)
-
 # =========================
-# COMMANDS
+# READY
 # =========================
-@bot.tree.command(name="setup", description="Setup bot")
-async def setup(interaction: discord.Interaction):
-    view = SetupView()
-    view.add_item(SaveButton())
 
-    await interaction.response.send_message(
-        "⚙️ Pilih channel:", view=view, ephemeral=True
-    )
+@bot.event
+async def on_ready():
+    print(f"Login sebagai {bot.user}")
 
-@bot.tree.command(name="history", description="Lihat history user")
-@app_commands.describe(user="User target")
-async def history(interaction: discord.Interaction, user: discord.User):
-    results = [
-        v for v in data_db.values()
-        if v["user_id"] == user.id
-    ][-5:]
+    try:
+        await bot.tree.sync()
+        print("✅ Slash command global ready")
+    except Exception as e:
+        print(e)
 
-    if not results:
-        await interaction.response.send_message("❌ Tidak ada data", ephemeral=True)
-        return
-
-    text = ""
-    for d in results:
-        text += f"💬 {d['content']} ({d['time']})\n"
-
-    await interaction.response.send_message(text, ephemeral=True)
-
-# =========================
 bot.run(TOKEN)
