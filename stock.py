@@ -252,6 +252,29 @@ class Stock(commands.Cog):
     async def before(self):
         await self.bot.wait_until_ready()
 
+@commands.command()
+async def howstock(self, ctx):
+    await ctx.send("""
+📘 **HOW TO USE STOCK BOT**
+
+1. Add stock:
+`!addstock dragon, dough, flame`
+
+2. Set timer:
+`1h 30m` or `90m` or `3600s`
+
+3. View stock:
+`!stock`
+
+⚙️ System:
+- Auto countdown
+- 1 min warning
+- Auto reset
+
+💡 Tips:
+Use comma to separate fruits!
+""")
+
 
 async def setup(bot):
     await bot.add_cog(Stock(bot))
