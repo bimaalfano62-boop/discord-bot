@@ -24,6 +24,7 @@ async def main():
         await bot.load_extension("ai")     # AI + Wiki
         await bot.load_extension("stock")  # Stock system
         await bot.start(TOKEN)
+        await bot.load_extension("Troll")
 
 
 # =========================
