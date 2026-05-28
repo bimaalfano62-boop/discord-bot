@@ -12,9 +12,7 @@ STOCK_FILE = "stock.json"
 # FRUIT DATABASE
 # =========================
 FRUIT_DATA = {
-    # Mythical
     "pteranodon": {"rarity": "Mythical",  "emoji": "🦕"},
-    # Legendary
     "dragon":  {"rarity": "Legendary", "emoji": "🐉"},
     "phoenix": {"rarity": "Legendary", "emoji": "🦅"},
     "dough":   {"rarity": "Legendary", "emoji": "🍞"},
@@ -23,7 +21,7 @@ FRUIT_DATA = {
     "gate":    {"rarity": "Legendary", "emoji": "🚪"},
     "melody":  {"rarity": "Legendary", "emoji": "🎵"},
     "tree":    {"rarity": "Legendary", "emoji": "🌳"},
-    # Epic
+
     "magma":   {"rarity": "Epic", "emoji": "🌋"},
     "flame":   {"rarity": "Epic", "emoji": "🔥"},
     "light":   {"rarity": "Epic", "emoji": "💡"},
@@ -34,7 +32,7 @@ FRUIT_DATA = {
     "ice":     {"rarity": "Epic", "emoji": "🧊"},
     "spirit":  {"rarity": "Epic", "emoji": "👻"},
     "magnet":  {"rarity": "Epic", "emoji": "🧲"},
-    # Rare
+
     "leopard":  {"rarity": "Rare", "emoji": "🐆"},
     "buddha":   {"rarity": "Rare", "emoji": "☯️"},
     "dark":     {"rarity": "Rare", "emoji": "🌙"},
@@ -47,7 +45,7 @@ FRUIT_DATA = {
     "brachio":  {"rarity": "Rare", "emoji": "🦕"},
     "spino":    {"rarity": "Rare", "emoji": "🦎"},
     "palm":     {"rarity": "Rare", "emoji": "🌴"},
-    # Uncommon
+
     "shadow":      {"rarity": "Uncommon", "emoji": "🌑"},
     "giraffe":     {"rarity": "Uncommon", "emoji": "🦒"},
     "wolf":        {"rarity": "Uncommon", "emoji": "🐺"},
@@ -55,7 +53,7 @@ FRUIT_DATA = {
     "string":      {"rarity": "Uncommon", "emoji": "🧵"},
     "telekinesis": {"rarity": "Uncommon", "emoji": "🔮"},
     "sand":        {"rarity": "Uncommon", "emoji": "🏜️"},
-    # Common
+
     "bomb":  {"rarity": "Common", "emoji": "💣"},
     "spike": {"rarity": "Common", "emoji": "🗡️"},
     "spin":  {"rarity": "Common", "emoji": "🌀"},
@@ -83,141 +81,96 @@ RARITY_EMOJI = {
 }
 
 # =========================
-# FRUIT LOOKUP
+# UTILS
 # =========================
 def match_fruit(input_name: str):
     key = input_name.lower().strip()
-    if key in FRUIT_DATA:
-        return key
-    return None
+    return key if key in FRUIT_DATA else None
 
-def get_embed_color(fruits: list) -> int:
+def get_embed_color(fruits):
     for rarity in RARITY_ORDER:
         for fruit in fruits:
             if FRUIT_DATA[fruit]["rarity"] == rarity:
                 return RARITY_COLORS[rarity]
     return 0x5865F2
 
-# =========================
-# LOAD & SAVE
-# =========================
 def load_data():
     try:
         with open(STOCK_FILE, "r") as f:
             return json.load(f)
     except:
-        return {
-            "fruits": [],
-            "reset_time": 0,
-            "channel_id": None,
-            "notified": False
-        }
+        return {"fruits": [], "reset_time": 0, "channel_id": None, "notified": False}
 
 def save_data(data):
     with open(STOCK_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
 # =========================
-# PARSE TIMER
+# TIMER PARSER
 # =========================
-def parse_time(time_str: str) -> int:
+def parse_time(time_str):
     time_str = time_str.lower()
-    hours = minutes = seconds = 0
+    h = re.findall(r'(\d+)h', time_str)
+    m = re.findall(r'(\d+)m', time_str)
+    s = re.findall(r'(\d+)s', time_str)
 
-    h = re.findall(r'(\d+)\s*(hours|hour|hrs|hr|h)', time_str)
-    m = re.findall(r'(\d+)\s*(minutes|minute|mins|min|m)', time_str)
-    s = re.findall(r'(\d+)\s*(seconds|second|secs|sec|s)', time_str)
-
-    if h: hours = int(h[0][0])
-    if m: minutes = int(m[0][0])
-    if s: seconds = int(s[0][0])
+    hours = int(h[0]) if h else 0
+    minutes = int(m[0]) if m else 0
+    seconds = int(s[0]) if s else 0
 
     if not (h or m or s):
         try:
-            minutes = int(time_str.strip())
+            minutes = int(time_str)
         except:
-            pass
+            return 0
 
     return hours * 3600 + minutes * 60 + seconds
 
 # =========================
-# FORMAT HELPERS
+# FORMAT
 # =========================
-def format_fruits(fruits: list) -> str:
-    result = []
-    for fruit in fruits:
-        d = FRUIT_DATA[fruit]
-        r_emoji = RARITY_EMOJI[d["rarity"]]
-        result.append(f"{d['emoji']} **{fruit.capitalize()}** {r_emoji} `{d['rarity']}`")
-    return "\n".join(result)
+def format_fruits(fruits):
+    return "\n".join([
+        f"{FRUIT_DATA[f]['emoji']} **{f.capitalize()}** {RARITY_EMOJI[FRUIT_DATA[f]['rarity']]} `{FRUIT_DATA[f]['rarity']}`"
+        for f in fruits
+    ])
 
-def format_remaining(remaining: int) -> str:
-    remaining = max(0, remaining)
-    hours = remaining // 3600
-    minutes = (remaining % 3600) // 60
-    seconds = remaining % 60
-    parts = []
-    if hours:   parts.append(f"{hours}h")
-    if minutes: parts.append(f"{minutes}m")
-    if seconds: parts.append(f"{seconds}s")
-    return " ".join(parts) if parts else "0s"
+def format_remaining(sec):
+    h = sec // 3600
+    m = (sec % 3600) // 60
+    s = sec % 60
+    return f"{h}h {m}m {s}s"
 
-def build_stock_embed(fruits: list, remaining: int) -> discord.Embed:
+def build_embed(fruits, remaining):
     embed = discord.Embed(
-        title="🍇 King Legacy — Current Stock",
+        title="🍇 Current Stock",
         description=format_fruits(fruits),
         color=get_embed_color(fruits)
     )
-    embed.add_field(name="⏳ Reset In", value=f"`{format_remaining(remaining)}`", inline=True)
-    embed.add_field(name="🍈 Total",    value=f"`{len(fruits)} fruit`",           inline=True)
-    embed.set_footer(text="King Legacy Stock Bot • Auto resets when timer hits 0")
+    embed.add_field(name="⏳ Reset In", value=format_remaining(remaining))
+    embed.add_field(name="🍈 Total", value=str(len(fruits)))
     return embed
 
 # =========================
-# STOCK VIEW (BUTTONS)
+# VIEW (FIXED PUBLIC)
 # =========================
 class StockView(View):
     def __init__(self, bot):
         super().__init__(timeout=None)
         self.bot = bot
 
-    @discord.ui.button(label="Refresh", style=discord.ButtonStyle.primary, emoji="🔄")
-    async def refresh(self, interaction: discord.Interaction, button: Button):
+    @discord.ui.button(label="Refresh", style=discord.ButtonStyle.primary)
+    async def refresh(self, interaction, button):
         data = load_data()
-        if not data["fruits"]:
-            await interaction.response.send_message("❌ No stock available.", ephemeral=True)
-            return
         remaining = data["reset_time"] - int(time.time())
+
         if remaining <= 0:
-            await interaction.response.send_message("⚠️ Stock has expired.", ephemeral=True)
+            await interaction.response.send_message("Expired", ephemeral=False)
             return
+
         await interaction.response.edit_message(
-            embed=build_stock_embed(data["fruits"], remaining), view=self
-        )
-
-    @discord.ui.button(label="Time Left", style=discord.ButtonStyle.secondary, emoji="⏱️")
-    async def time_left(self, interaction: discord.Interaction, button: Button):
-        data = load_data()
-        remaining = data["reset_time"] - int(time.time())
-        if remaining <= 0:
-            await interaction.response.send_message("⚠️ Stock has expired.", ephemeral=True)
-        else:
-            await interaction.response.send_message(
-                f"⏳ Stock resets in **{format_remaining(remaining)}**", ephemeral=True
-            )
-
-    @discord.ui.button(label="List Fruits", style=discord.ButtonStyle.secondary, emoji="📋")
-    async def list_fruits(self, interaction: discord.Interaction, button: Button):
-        data = load_data()
-        if not data["fruits"]:
-            await interaction.response.send_message("❌ No stock available.", ephemeral=True)
-            return
-        lines = [
-            f"• {FRUIT_DATA[f]['emoji']} {f.capitalize()} — `{FRUIT_DATA[f]['rarity']}`"
-            for f in data["fruits"]
-        ]
-        await interaction.response.send_message(
-            "📋 **Fruits in stock:**\n" + "\n".join(lines), ephemeral=True
+            embed=build_embed(data["fruits"], remaining),
+            view=self
         )
 
 # =========================
@@ -228,202 +181,75 @@ class Stock(commands.Cog):
         self.bot = bot
         self.check_timer.start()
 
-    def cog_unload(self):
-        self.check_timer.cancel()
-
-    # =========================
-    # ADD STOCK
-    # =========================
     @commands.command()
-    async def addstock(self, ctx, *, raw_input: str = None):
+    async def addstock(self, ctx, *, fruits: str):
         data = load_data()
 
-        if raw_input:
-            inputs = [f.strip() for f in raw_input.split(",")]
-        else:
-            await ctx.send("🍇 Send fruit names separated by commas\nExample: `Dragon, Dough, Tree`")
-            def check(m):
-                return m.author == ctx.author and m.channel == ctx.channel
-            try:
-                msg = await self.bot.wait_for("message", timeout=60, check=check)
-                inputs = [f.strip() for f in msg.content.split(",")]
-            except asyncio.TimeoutError:
-                await ctx.send("❌ Timed out, please try again.")
-                return
-
-        valid, invalid = [], []
-        for name in inputs:
-            matched = match_fruit(name)
-            if matched:
-                valid.append(matched)
-            else:
-                invalid.append(name)
-
-        if invalid:
-            await ctx.send(
-                f"⚠️ The following fruits were **not found** in the database:\n"
-                f"`{'`, `'.join(invalid)}`\n"
-                f"Use `!fruitlist` to see all available fruits."
-            )
+        inputs = [f.strip() for f in fruits.split(",")]
+        valid = [match_fruit(f) for f in inputs if match_fruit(f)]
 
         if not valid:
-            await ctx.send("❌ No valid fruits to add.")
+            await ctx.send("❌ No valid fruits")
             return
 
         data["fruits"] = valid
         data["channel_id"] = ctx.channel.id
 
-        await ctx.send("⏳ Send the timer\nExample: `6h` / `1hour 30m` / `1h 2m 3s`")
+        await ctx.send("⏳ Send timer (example: 1h 30m)")
+
         def check(m):
             return m.author == ctx.author and m.channel == ctx.channel
-        try:
-            msg2 = await self.bot.wait_for("message", timeout=60, check=check)
-            total_seconds = parse_time(msg2.content)
-            if total_seconds <= 0:
-                await ctx.send("❌ Invalid timer.")
-                return
-            data["reset_time"] = int(time.time()) + total_seconds
-            data["notified"] = False
-            save_data(data)
 
-            embed = build_stock_embed(valid, total_seconds)
-            embed.title = "✅ Stock Updated! — King Legacy"
-            await ctx.send(embed=embed, view=StockView(self.bot))
+        msg = await self.bot.wait_for("message", check=check)
+        seconds = parse_time(msg.content)
 
-        except asyncio.TimeoutError:
-            await ctx.send("❌ Timed out, please try again.")
-
-    # =========================
-    # SHOW STOCK
-    # =========================
-    @commands.command()
-    async def stock(self, ctx):
-        data = load_data()
-        if not data["fruits"]:
-            await ctx.send("❌ No stock available.")
-            return
-        remaining = data["reset_time"] - int(time.time())
-        if remaining <= 0:
-            await ctx.send("⚠️ Stock has expired.")
-            return
-        await ctx.send(embed=build_stock_embed(data["fruits"], remaining), view=StockView(self.bot))
-
-    @commands.command()
-    async def viewstock(self, ctx):
-        await ctx.invoke(self.bot.get_command("stock"))
-
-    # =========================
-    # SET TIMER
-    # =========================
-    @commands.command()
-    async def settimer(self, ctx, *, time_str: str = None):
-        data = load_data()
-        if not data["fruits"]:
-            await ctx.send("❌ No stock available. Use `!addstock` first.")
-            return
-
-        if not time_str:
-            await ctx.send("⏳ Send the new timer\nExample: `6h` / `1hour 30mins` / `1h 2m 3s`")
-            def check(m):
-                return m.author == ctx.author and m.channel == ctx.channel
-            try:
-                msg = await self.bot.wait_for("message", timeout=60, check=check)
-                time_str = msg.content
-            except asyncio.TimeoutError:
-                await ctx.send("❌ Timed out, please try again.")
-                return
-
-        total_seconds = parse_time(time_str)
-        if total_seconds <= 0:
-            await ctx.send("❌ Invalid timer.")
-            return
-
-        data["reset_time"] = int(time.time()) + total_seconds
+        data["reset_time"] = int(time.time()) + seconds
         data["notified"] = False
         save_data(data)
 
-        embed = build_stock_embed(data["fruits"], total_seconds)
-        embed.title = "⏱️ Timer Updated! — King Legacy"
-        await ctx.send(embed=embed, view=StockView(self.bot))
+        await ctx.send(
+            embed=build_embed(valid, seconds),
+            view=StockView(self.bot)
+        )
 
-    # =========================
-    # FRUIT LIST
-    # =========================
     @commands.command()
-    async def fruitlist(self, ctx):
-        embed = discord.Embed(title="📖 King Legacy Fruit Database", color=0x5865F2)
-        for rarity in RARITY_ORDER:
-            fruits_in_rarity = [
-                f"{v['emoji']} {k.capitalize()}"
-                for k, v in FRUIT_DATA.items()
-                if v["rarity"] == rarity
-            ]
-            if fruits_in_rarity:
-                embed.add_field(
-                    name=f"{RARITY_EMOJI[rarity]} {rarity}",
-                    value="\n".join(fruits_in_rarity),
-                    inline=True
-                )
-        await ctx.send(embed=embed)
+    async def stock(self, ctx):
+        data = load_data()
+        remaining = data["reset_time"] - int(time.time())
 
-    # =========================
-    # HOW TO USE
-    # =========================
-    @commands.command()
-    async def howstock(self, ctx):
-        embed = discord.Embed(title="📘 Stock Bot — How to Use", color=0x5865F2)
-        embed.add_field(
-            name="`!addstock`",
-            value="Direct: `!addstock Dragon, Dough, Tree`\nOr type without arguments and follow the prompts",
-            inline=False
-        )
-        embed.add_field(
-            name="`!stock` / `!viewstock`",
-            value="View current stock + countdown + buttons",
-            inline=False
-        )
-        embed.add_field(
-            name="`!settimer`",
-            value="Change the timer without changing the stock\nExample: `!settimer 1hour 30m` / `!settimer 6h`",
-            inline=False
-        )
-        embed.add_field(name="`!fruitlist`", value="View all fruits in the database with their rarity", inline=False)
-        embed.add_field(
-            name="⚙️ Timer Format",
-            value="`6h` • `1hour 30m` • `1h 2m 3s` • `1hours 2mins 3secs` • `30` (minutes)",
-            inline=False
-        )
-        await ctx.send(embed=embed)
+        if remaining <= 0:
+            await ctx.send("❌ Expired")
+            return
 
-    # =========================
-    # TIMER LOOP
-    # =========================
+        await ctx.send(
+            embed=build_embed(data["fruits"], remaining),
+            view=StockView(self.bot)
+        )
+
     @tasks.loop(seconds=5)
     async def check_timer(self):
         data = load_data()
-        if data["reset_time"] == 0 or not data["channel_id"]:
+
+        if not data["channel_id"]:
             return
 
-        now = int(time.time())
-        remaining = data["reset_time"] - now
+        remaining = data["reset_time"] - int(time.time())
         channel = self.bot.get_channel(data["channel_id"])
-        if not channel:
-            return
 
-        if remaining <= 60 and remaining > 0 and not data.get("notified"):
-            await channel.send("⚠️ Stock will reset in **1 minute!**")
+        if remaining <= 60 and remaining > 0 and not data["notified"]:
+            await channel.send("⚠️ 1 minute left!")
             data["notified"] = True
             save_data(data)
 
-        if remaining <= 0:
+        if remaining <= 0 and data["fruits"]:
             data["fruits"] = []
             data["reset_time"] = 0
             data["notified"] = False
             save_data(data)
-            await channel.send("🔄 Stock has been reset! Use `!addstock` to set new stock.")
+            await channel.send("🔄 Stock reset!")
 
     @check_timer.before_loop
-    async def before_timer(self):
+    async def before(self):
         await self.bot.wait_until_ready()
 
 
