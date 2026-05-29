@@ -522,7 +522,7 @@ class Troll(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
-@app_commands.command(name="unpunish", description="Remove punishment from a user")
+    @app_commands.command(name="unpunish", description="Remove punishment from a user")
     @app_commands.describe(user="Select user to unpunish")
     async def unpunish(self, interaction: discord.Interaction, user: discord.Member):
         if not is_allowed(interaction):
