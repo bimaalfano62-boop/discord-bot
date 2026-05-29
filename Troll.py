@@ -522,8 +522,133 @@ class Troll(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="unpunish", description="Remove punishment from a user")
+@app_commands.command(name="unpunish", description="Remove punishment from a user")
     @app_commands.describe(user="Select user to unpunish")
     async def unpunish(self, interaction: discord.Interaction, user: discord.Member):
         if not is_allowed(interaction):
-    
+            await interaction.response.send_message("❌ You don't have permission.", ephemeral=True)
+            return
+
+        config = load_config()
+        guild_id = str(interaction.guild.id)
+        punished = config.get(guild_id, {}).get("punished_users", [])
+
+        if user.id not in punished:
+            await interaction.response.send_message(
+                f"⚠️ {user.mention} is not being punished.", ephemeral=True
+            )
+            return
+
+        punished.remove(user.id)
+        config[guild_id]["punished_users"] = punished
+        save_config(config)
+
+        await remove_punish_role(interaction.guild, user.id)
+
+        embed = discord.Embed(
+            title="✅ Punishment Removed",
+            description=f"{user.mention} has been freed from punishment.",
+            color=0x00FF00
+        )
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="punishlist", description="See all currently punished users")
+    async def punishlist(self, interaction: discord.Interaction):
+        if not is_allowed(interaction):
+            await interaction.response.send_message("❌ You don't have permission.", ephemeral=True)
+            return
+
+        config = load_config()
+        guild_id = str(interaction.guild.id)
+        punished = config.get(guild_id, {}).get("punished_users", [])
+
+        if not punished:
+            await interaction.response.send_message(
+                "✅ No users are currently being punished.", ephemeral=True
+            )
+            return
+
+        mentions = "\n".join([f"• <@{uid}>" for uid in punished])
+        embed = discord.Embed(title="😈 Punished Users", description=mentions, color=0xFF0000)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        if message.author.bot:
+            return
+        if not message.guild:
+            return
+
+        config = load_config()
+        guild_id = str(message.guild.id)
+
+        if guild_id not in config:
+            return
+
+        # PUNISH LOGIC
+        punished = config[guild_id].get("punished_users", [])
+        if message.author.id in punished and message.content:
+            try:
+                await message.delete()
+                await message.channel.send(
+                    f"**{message.author.display_name}:** {PUNISH_MESSAGE}",
+                    allowed_mentions=discord.AllowedMentions.none()
+                )
+            except Exception as e:
+                print(f"Punish error: {e}")
+            return
+
+        # TOXIC DETECTION
+        if message.content:
+            toxic_found = contains_toxic(message.content)
+            if toxic_found:
+                dashboard_id = config[guild_id].get("dashboard")
+                if dashboard_id:
+                    dashboard = self.bot.get_channel(dashboard_id)
+                    if dashboard:
+                        censored = censor_text(message.content, toxic_found)
+                        embed = discord.Embed(
+                            title="⚠️ Toxic Message Detected!",
+                            color=0xFF4500
+                        )
+                        embed.add_field(name="👤 User",        value=message.author.mention,                    inline=False)
+                        embed.add_field(name="💬 Message",     value=censored,                                   inline=False)
+                        embed.add_field(name="🤬 Toxic Words", value=", ".join([f"`{w}`" for w in toxic_found]), inline=False)
+                        embed.add_field(name="📍 Channel",     value=message.channel.mention,                    inline=False)
+                        embed.add_field(name="⏰ Time",        value=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), inline=False)
+                        embed.set_thumbnail(url=message.author.display_avatar.url)
+                        embed.set_footer(text=f"User ID: {message.author.id}")
+                        await dashboard.send(
+                            embed=embed,
+                            view=ToxicWarningView(message.author.id, guild_id)
+                        )
+
+        # MONITOR LOGIC
+        monitor_id   = config[guild_id].get("monitor")
+        dashboard_id = config[guild_id].get("dashboard")
+
+        if not monitor_id or not dashboard_id:
+            return
+        if message.channel.id != monitor_id:
+            return
+
+        dashboard = self.bot.get_channel(dashboard_id)
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        embed = discord.Embed(
+            title="📩 Incoming Message",
+            color=0x00ffff,
+            timestamp=datetime.datetime.now()
+        )
+        embed.add_field(name="👤 User",    value=message.author.mention,  inline=False)
+        embed.add_field(name="💬 Message", value=message.content or "-",  inline=False)
+        embed.add_field(name="📍 Channel", value=message.channel.mention, inline=False)
+        embed.add_field(name="⏰ Time",    value=now,                     inline=False)
+        embed.set_footer(text=f"Message ID: {message.id}")
+
+        await dashboard.send(embed=embed, view=ReplyView(message.id, message.channel.id))
+
+
+async def setup(bot):
+    await bot.add_cog(Troll(bot))
+
