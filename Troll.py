@@ -4,33 +4,22 @@ from discord import app_commands
 import json
 import datetime
 import os
-import random
 import re
-from googletrans import Translator
 
 CONFIG_FILE = "config.json"
-translator = Translator()
 
-# =========================
-# TOXIC WORD DATABASE
-# =========================
 TOXIC_WORDS = [
-    # English
     "fuck", "shit", "bitch", "asshole", "bastard", "damn", "crap",
     "pussy", "dick", "cock", "ass", "idiot", "stupid", "moron",
     "retard", "dumbass", "jackass", "prick", "slut", "whore",
     "faggot", "nigga", "nigger", "cunt", "motherfucker", "fucker",
-    # Indonesian
-    "anjing", "bangsat", "kontol", "memek", "ngentot", "brengsek",
+    "nga", "bullshit", "goon", "gooner", "retard", "tard",
     "bajingan", "goblok", "tolol", "bodoh", "kampret", "sialan",
     "keparat", "tai", "jancok", "cok", "asu", "celeng", "babi",
 ]
 
 PUNISH_MESSAGE = "punish me harder Daddy 🥺"
 
-# =========================
-# CONFIG
-# =========================
 def load_config():
     if not os.path.exists(CONFIG_FILE):
         return {}
@@ -64,32 +53,26 @@ def censor_text(text: str, toxic_found: list) -> str:
         result = re.sub(re.escape(word), censored, result, flags=re.IGNORECASE)
     return result
 
-# =========================
-# PUNISH ROLE HELPER
-# =========================
 async def get_or_create_punish_role(guild: discord.Guild) -> discord.Role:
-    """Cari atau buat role 'Punished' di server."""
     role = discord.utils.get(guild.roles, name="Punished 🔒")
     if not role:
         role = await guild.create_role(
             name="Punished 🔒",
             color=discord.Color.dark_gray(),
-            reason="Auto-created by Troll bot for punishment system"
+            reason="Auto-created by Troll bot"
         )
     return role
 
 async def apply_punish_role(guild: discord.Guild, user_id: int):
-    """Kasih role Punished ke user."""
     try:
         member = guild.get_member(user_id)
         if member:
             role = await get_or_create_punish_role(guild)
             await member.add_roles(role, reason="Punished by Troll bot")
     except Exception as e:
-        print(f"Apply punish role error: {e}")
+        print(f"Apply role error: {e}")
 
 async def remove_punish_role(guild: discord.Guild, user_id: int):
-    """Hapus role Punished dari user."""
     try:
         member = guild.get_member(user_id)
         if member:
@@ -97,7 +80,7 @@ async def remove_punish_role(guild: discord.Guild, user_id: int):
             if role and role in member.roles:
                 await member.remove_roles(role, reason="Unpunished by Troll bot")
     except Exception as e:
-        print(f"Remove punish role error: {e}")
+        print(f"Remove role error: {e}")
 
 # =========================
 # SETUP UI
@@ -111,7 +94,9 @@ class MonitorSelect(discord.ui.ChannelSelect):
 
     async def callback(self, interaction: discord.Interaction):
         self.view.monitor_channel = self.values[0].id
-        await interaction.response.send_message(f"✅ Monitor: <#{self.view.monitor_channel}>", ephemeral=True)
+        await interaction.response.send_message(
+            f"✅ Monitor: <#{self.view.monitor_channel}>", ephemeral=True
+        )
 
 class DashboardSelect(discord.ui.ChannelSelect):
     def __init__(self):
@@ -122,7 +107,9 @@ class DashboardSelect(discord.ui.ChannelSelect):
 
     async def callback(self, interaction: discord.Interaction):
         self.view.dashboard_channel = self.values[0].id
-        await interaction.response.send_message(f"✅ Dashboard: <#{self.view.dashboard_channel}>", ephemeral=True)
+        await interaction.response.send_message(
+            f"✅ Dashboard: <#{self.view.dashboard_channel}>", ephemeral=True
+        )
 
 class SetupView(discord.ui.View):
     def __init__(self):
@@ -135,7 +122,9 @@ class SetupView(discord.ui.View):
     @discord.ui.button(label="Save", style=discord.ButtonStyle.green)
     async def save(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not self.monitor_channel or not self.dashboard_channel:
-            await interaction.response.send_message("❌ Please select all channels first!", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Please select all channels first!", ephemeral=True
+            )
             return
         config = load_config()
         guild_id = str(interaction.guild.id)
@@ -164,7 +153,9 @@ class ReplyModal(discord.ui.Modal, title="Reply Message"):
         try:
             msg = await channel.fetch_message(self.message_id)
             sent = await msg.reply(self.reply.value, mention_author=False)
-            await interaction.response.send_message("✅ Reply sent! (auto-deletes in 10s)", ephemeral=True)
+            await interaction.response.send_message(
+                "✅ Reply sent! (auto-deletes in 10s)", ephemeral=True
+            )
             await sent.delete(delay=10)
         except Exception as e:
             await interaction.response.send_message(f"❌ Failed: {e}", ephemeral=True)
@@ -190,7 +181,9 @@ class SendMessageModal(discord.ui.Modal, title="Send Message"):
                 self.message.value,
                 allowed_mentions=discord.AllowedMentions.none()
             )
-            await interaction.response.send_message("✅ Message sent! (auto-deletes in 10s)", ephemeral=True)
+            await interaction.response.send_message(
+                "✅ Message sent! (auto-deletes in 10s)", ephemeral=True
+            )
             await sent.delete(delay=10)
         except Exception as e:
             await interaction.response.send_message(f"❌ Failed: {e}", ephemeral=True)
@@ -219,12 +212,15 @@ class SendMediaModal(discord.ui.Modal, title="Send GIF / Image"):
             return
 
         valid_extensions = (".gif", ".png", ".jpg", ".jpeg", ".webp")
-        valid_hosts = ("tenor.com", "giphy.com", "imgur.com", "i.imgur.com",
-                       "media.discordapp.net", "cdn.discordapp.com")
+        valid_hosts = (
+            "tenor.com", "giphy.com", "imgur.com", "i.imgur.com",
+            "media.discordapp.net", "cdn.discordapp.com"
+        )
         url_lower = self.url.value.lower()
-
-        is_valid = any(url_lower.endswith(ext) for ext in valid_extensions) or \
-                   any(host in url_lower for host in valid_hosts)
+        is_valid = (
+            any(url_lower.endswith(ext) for ext in valid_extensions) or
+            any(host in url_lower for host in valid_hosts)
+        )
 
         if not is_valid:
             await interaction.response.send_message(
@@ -238,16 +234,13 @@ class SendMediaModal(discord.ui.Modal, title="Send GIF / Image"):
             embed.set_image(url=self.url.value)
             if self.caption.value:
                 embed.description = self.caption.value
-            await channel.send(
-                embed=embed,
-                allowed_mentions=discord.AllowedMentions.none()
-            )
+            await channel.send(embed=embed, allowed_mentions=discord.AllowedMentions.none())
             await interaction.response.send_message("✅ Sent!", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"❌ Failed: {e}", ephemeral=True)
 
 # =========================
-# REPLY VIEW (3 BUTTONS)
+# REPLY VIEW
 # =========================
 class ReplyView(discord.ui.View):
     def __init__(self, message_id, channel_id):
@@ -297,7 +290,9 @@ class ToxicWarningView(discord.ui.View):
 
         punished = config[self.guild_id].get("punished_users", [])
         if self.user_id in punished:
-            await interaction.response.send_message("⚠️ User is already being punished!", ephemeral=True)
+            await interaction.response.send_message(
+                "⚠️ User is already being punished!", ephemeral=True
+            )
             return
 
         punished.append(self.user_id)
@@ -312,7 +307,10 @@ class ToxicWarningView(discord.ui.View):
 
         embed = discord.Embed(
             title="👊 User Punished!",
-            description=f"<@{self.user_id}> has been punished for toxic behavior!\nEvery message will now say **\"{PUNISH_MESSAGE}\"** 😈",
+            description=(
+                f"<@{self.user_id}> has been punished for toxic behavior!\n"
+                f"Every message will now say **\"{PUNISH_MESSAGE}\"** 😈"
+            ),
             color=0xFF0000
         )
         await interaction.response.send_message(embed=embed)
@@ -416,9 +414,11 @@ class Troll(commands.Cog):
         if not is_allowed(interaction):
             await interaction.response.send_message("❌ You don't have permission.", ephemeral=True)
             return
-        await interaction.response.send_message("⚙️ Select channels:", view=SetupView(), ephemeral=True)
+        await interaction.response.send_message(
+            "⚙️ Select channels:", view=SetupView(), ephemeral=True
+        )
 
-    @app_commands.command(name="resetsetup", description="Reset config & clear all messages in monitor and dashboard")
+    @app_commands.command(name="resetsetup", description="Reset config & clear all messages")
     async def resetsetup(self, interaction: discord.Interaction):
         if not is_allowed(interaction):
             await interaction.response.send_message("❌ You don't have permission.", ephemeral=True)
@@ -428,7 +428,9 @@ class Troll(commands.Cog):
         guild_id = str(interaction.guild.id)
 
         if guild_id not in config:
-            await interaction.response.send_message("❌ No config found. Run `/setup` first.", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ No config found. Run `/setup` first.", ephemeral=True
+            )
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -448,24 +450,38 @@ class Troll(commands.Cog):
         save_config(config)
 
         if errors:
-            await interaction.followup.send(f"⚠️ Config reset but some errors:\n" + "\n".join(errors), ephemeral=True)
+            await interaction.followup.send(
+                "⚠️ Config reset but some errors:\n" + "\n".join(errors), ephemeral=True
+            )
         else:
-            await interaction.followup.send("✅ All messages cleared and config deleted. Run `/setup` to reconfigure.", ephemeral=True)
+            await interaction.followup.send(
+                "✅ All messages cleared and config deleted. Run `/setup` to reconfigure.",
+                ephemeral=True
+            )
 
     @app_commands.command(name="permissions", description="Manage who can access Troll features")
     async def permissions(self, interaction: discord.Interaction):
         if interaction.user.id != interaction.guild.owner_id:
-            await interaction.response.send_message("❌ Only the server owner can manage permissions.", ephemeral=True)
+            await interaction.response.send_message(
+                "❌ Only the server owner can manage permissions.", ephemeral=True
+            )
             return
 
         config = load_config()
         guild_id = str(interaction.guild.id)
         allowed = config.get(guild_id, {}).get("allowed_users", [])
 
-        desc = ("**Currently allowed users:**\n" + "\n".join([f"<@{uid}>" for uid in allowed]) + "\n\n") if allowed else "**No users allowed yet.**\n\n"
+        desc = (
+            ("**Currently allowed users:**\n" + "\n".join([f"<@{uid}>" for uid in allowed]) + "\n\n")
+            if allowed else "**No users allowed yet.**\n\n"
+        )
         desc += "Use the dropdowns below to add or remove users."
 
-        embed = discord.Embed(title="🔐 Troll Feature Permissions", description=desc, color=0x5865F2)
+        embed = discord.Embed(
+            title="🔐 Troll Feature Permissions",
+            description=desc,
+            color=0x5865F2
+        )
         await interaction.response.send_message(embed=embed, view=PermissionView(), ephemeral=True)
 
     @app_commands.command(name="punish", description="Punish me daddy!?")
@@ -485,7 +501,9 @@ class Troll(commands.Cog):
 
         punished = config[guild_id].get("punished_users", [])
         if user.id in punished:
-            await interaction.response.send_message(f"⚠️ {user.mention} is already being punished!", ephemeral=True)
+            await interaction.response.send_message(
+                f"⚠️ {user.mention} is already being punished!", ephemeral=True
+            )
             return
 
         punished.append(user.id)
@@ -496,7 +514,10 @@ class Troll(commands.Cog):
 
         embed = discord.Embed(
             title="👊 User Punished!",
-            description=f"{user.mention} has been punished!\nEvery message will now say **\"{PUNISH_MESSAGE}\"** 😈",
+            description=(
+                f"{user.mention} has been punished!\n"
+                f"Every message will now say **\"{PUNISH_MESSAGE}\"** 😈"
+            ),
             color=0xFF0000
         )
         await interaction.response.send_message(embed=embed)
@@ -504,4 +525,5 @@ class Troll(commands.Cog):
     @app_commands.command(name="unpunish", description="Remove punishment from a user")
     @app_commands.describe(user="Select user to unpunish")
     async def unpunish(self, interaction: discord.Interaction, user: discord.Member):
-        if not is_allowed
+        if not is_allowed(interaction):
+    
