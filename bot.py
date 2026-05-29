@@ -13,20 +13,14 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-async def main():
-    async with bot:
-        await bot.load_extension("ai")
-        await bot.load_extension("stock")
-        await bot.load_extension("Troll")  # load sebelum bot.start()
-        await bot.start(TOKEN)
-
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
 
-    # Fix StockView persistent buttons
+    # Fix StockView persistent (tidak perlu parameter bot lagi)
     try:
-        bot.add_view(StockView(bot))
+        bot.add_view(StockView())
+        print("✅ StockView registered")
     except Exception as e:
         print(f"StockView error: {e}")
 
@@ -35,6 +29,13 @@ async def on_ready():
         synced = await bot.tree.sync()
         print(f"✅ Synced {len(synced)} slash commands")
     except Exception as e:
-        print(e)
+        print(f"Slash sync error: {e}")
+
+async def main():
+    async with bot:
+        await bot.load_extension("ai")
+        await bot.load_extension("stock")
+        await bot.load_extension("Troll")
+        await bot.start(TOKEN)
 
 asyncio.run(main())
