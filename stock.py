@@ -13,52 +13,63 @@ PERM_FILE = "permissions.json"
 # FRUIT DATABASE
 # =========================
 FRUIT_DATA = {
-    "pteranodon": {"rarity": "Mythical",  "emoji": "<:pter2:1509927019629121629>"},
-    "dragon":     {"rarity": "Legendary", "emoji": "<:dragon:1509933316571140196>"},
-    "phoenix":    {"rarity": "Legendary", "emoji": "<:phoenix:1509933208320606270>"},
-    "dough":      {"rarity": "Legendary", "emoji": "<:dough:1509933266239619102>"},
-    "toy":        {"rarity": "Legendary", "emoji": "<:toy:1509933247881285683>"},
-    "demon":      {"rarity": "Legendary", "emoji": "<:demon:1509933300335251557>"},
-    "gate":       {"rarity": "Legendary", "emoji": "<:gate:1509933228507795466>"},
-    "melody":     {"rarity": "Legendary", "emoji": "<:melody:1509933284300423308>"},
-    "tree":       {"rarity": "Legendary", "emoji": "<:tree:1509933333336031343>"},
+    # ── Mythical ──────────────────────────────────────────
+    "pteranodon": {
+        "rarity": "Mythical",
+        "emoji": "<:pter2:1509927019629121629>",
+        "price": 55_000_000,
+    },
 
-    "magma":   {"rarity": "Epic", "emoji": "<:magma:1509929630734221533>"},
-    "flame":   {"rarity": "Epic", "emoji": "<:flame:1509929613797883985>"},
-    "light":   {"rarity": "Epic", "emoji": "<:light:1509932593926115469>"},
-    "rumble":  {"rarity": "Epic", "emoji": "<:rumble:1509932833060290681>"},
-    "quake":   {"rarity": "Epic", "emoji": "<:quake:1509932765783654450>"},
-    "snow":    {"rarity": "Epic", "emoji": "<:snow:1509932665279746211>"},
-    "gas":     {"rarity": "Epic", "emoji": "<:gas:1509932694241284167>"},
-    "ice":     {"rarity": "Epic", "emoji": "<:ice:1509932635982397450>"},
-    "spirit":  {"rarity": "Epic", "emoji": "<:spirit:1509932859702513685>"},
-    "magnet":  {"rarity": "Epic", "emoji": "<:magnet:1509932723375050812>"},
+    # ── Legendary ─────────────────────────────────────────
+    "dragon":  {"rarity": "Legendary", "emoji": "<:dragon:1509933316571140196>",  "price": 50_000_000},
+    "phoenix": {"rarity": "Legendary", "emoji": "<:phoenix:1509933208320606270>", "price": 4_500_000},
+    "dough":   {"rarity": "Legendary", "emoji": "<:dough:1509933266239619102>",   "price": 28_500_000},
+    "toy":     {"rarity": "Legendary", "emoji": "<:toy:1509933247881285683>",     "price": 35_000_000},
+    "demon":   {"rarity": "Legendary", "emoji": "<:demon:1509933300335251557>",   "price": 40_000_000},
+    "gate":    {"rarity": "Legendary", "emoji": "<:gate:1509933228507795466>",    "price": 45_000_000},
+    "melody":  {"rarity": "Legendary", "emoji": "<:melody:1509933284300423308>",  "price": 42_000_000},
+    "tree":    {"rarity": "Legendary", "emoji": "<:tree:1509933333336031343>",    "price": 38_000_000},
 
-    "leopard":  {"rarity": "Rare", "emoji": "<:leopard:1509933113055383703>"},
-    "buddha":   {"rarity": "Rare", "emoji": "<:buddha:1509933037100470333>"},
-    "dark":     {"rarity": "Rare", "emoji": "<:dark:1509933005374750862>"},
-    "venom":    {"rarity": "Rare", "emoji": "<:venom:1509933141056422069>"},
-    "control":  {"rarity": "Rare", "emoji": "<:control:1509933189089591346>"},
-    "gravity":  {"rarity": "Rare", "emoji": "<:gravity:1509933161771962571>"},
-    "rubber":   {"rarity": "Rare", "emoji": "<:rubber:1509932936978235512>"},
-    "mammoth":  {"rarity": "Rare", "emoji": "<:mammoth:1509933080100475101>"},
-    "allo":     {"rarity": "Rare", "emoji": "🦖"},
-    "brachio":  {"rarity": "Rare", "emoji": "🦕"},
-    "spino":    {"rarity": "Rare", "emoji": "🦎"},
-    "palm":     {"rarity": "Rare", "emoji": "🌴"},
+    # ── Epic ──────────────────────────────────────────────
+    "magma":   {"rarity": "Epic", "emoji": "<:magma:1509929630734221533>",   "price": 1_950_000},
+    "flame":   {"rarity": "Epic", "emoji": "<:flame:1509929613797883985>",   "price": 2_300_000},
+    "light":   {"rarity": "Epic", "emoji": "<:light:1509932593926115469>",   "price": 2_400_000},
+    "rumble":  {"rarity": "Epic", "emoji": "<:rumble:1509932833060290681>",  "price": 2_250_000},
+    "quake":   {"rarity": "Epic", "emoji": "<:quake:1509932765783654450>",   "price": 3_600_000},
+    "snow":    {"rarity": "Epic", "emoji": "<:snow:1509932665279746211>",    "price": 2_700_000},
+    "gas":     {"rarity": "Epic", "emoji": "<:gas:1509932694241284167>",     "price": 2_500_000},
+    "ice":     {"rarity": "Epic", "emoji": "<:ice:1509932635982397450>",     "price": 1_200_000},
+    "spirit":  {"rarity": "Epic", "emoji": "<:spirit:1509932859702513685>",  "price": 4_500_000},
+    "magnet":  {"rarity": "Epic", "emoji": "<:magnet:1509932723375050812>",  "price": 5_500_000},
 
-    "shadow":      {"rarity": "Uncommon", "emoji": "<:shadow:1509929594969395303>"},
-    "giraffe":     {"rarity": "Uncommon", "emoji": "<:giraffe:1509929577064169542>"},
-    "wolf":        {"rarity": "Uncommon", "emoji": "<:wolf:1509929559678783638>"},
-    "barrier":     {"rarity": "Uncommon", "emoji": "<:barrier:1509929468364329061>"},
-    "string":      {"rarity": "Uncommon", "emoji": "<:string:1509929524689768599>"},
-    "telekinesis": {"rarity": "Uncommon", "emoji": "🔮"},
-    "sand":        {"rarity": "Uncommon", "emoji": "<:sand:1509932967278153752>"},
+    # ── Rare ──────────────────────────────────────────────
+    "leopard":  {"rarity": "Rare", "emoji": "<:leopard:1509933113055383703>", "price": 700_000},
+    "buddha":   {"rarity": "Rare", "emoji": "<:buddha:1509933037100470333>",  "price": 1_950_000},
+    "dark":     {"rarity": "Rare", "emoji": "<:dark:1509933005374750862>",    "price": 7_000_000},
+    "venom":    {"rarity": "Rare", "emoji": "<:venom:1509933141056422069>",   "price": 1_950_000},
+    "control":  {"rarity": "Rare", "emoji": "<:control:1509933189089591346>", "price": 3_500_000},
+    "gravity":  {"rarity": "Rare", "emoji": "<:gravity:1509933161771962571>", "price": 2_800_000},
+    "rubber":   {"rarity": "Rare", "emoji": "<:rubber:1509932936978235512>",  "price": 6_250_000},
+    "mammoth":  {"rarity": "Rare", "emoji": "<:mammoth:1509933080100475101>", "price": 3_700_000},
+    "allo":     {"rarity": "Rare", "emoji": "<:allo:1509940707908124905>",                             "price": 2_800_000},
+    "brachio":  {"rarity": "Rare", "emoji": "<:brachio:1509940751788937426>",                             "price": 3_000_000},
+    "spino":    {"rarity": "Rare", "emoji": "<:spino:1509940730846773298>",                             "price": 5_000_000},
+    "paw":     {"rarity": "Rare", "emoji": "<:paw:1509929487381299251>",                             "price": 1_500_000},
 
-    "bomb":  {"rarity": "Common", "emoji": "<:bomb:1509926839483764967>"},
-    "spike": {"rarity": "Common", "emoji": "<:spike:1509927513025937408>"},
-    "spin":  {"rarity": "Common", "emoji": "<:spin:1509927644009992263>"},
-    "smoke": {"rarity": "Common", "emoji": "<:smoke:1509929541219647583>"},
+    # ── Uncommon ──────────────────────────────────────────
+    "shadow":      {"rarity": "Uncommon", "emoji": "<:shadow:1509929594969395303>", "price": 2_000_000},
+    "giraffe":     {"rarity": "Uncommon", "emoji": "<:giraffe:1509929577064169542>","price": 700_000},
+    "wolf":        {"rarity": "Uncommon", "emoji": "<:wolf:1509929559678783638>",   "price": 700_000},
+    "barrier":     {"rarity": "Uncommon", "emoji": "<:barrier:1509929468364329061>","price": 1_350_000},
+    "string":      {"rarity": "Uncommon", "emoji": "<:string:1509929524689768599>", "price": 2_400_000},
+    "telekinesis": {"rarity": "Uncommon", "emoji": "<:paw:1509929487381299251>",                            "price": 600_000},
+    "sand":        {"rarity": "Uncommon", "emoji": "<:sand:1509932967278153752>",   "price": 1_500_000},
+
+    # ── Common ────────────────────────────────────────────
+    "bomb":  {"rarity": "Common", "emoji": "<:bomb:1509926839483764967>",  "price": 250_000},
+    "spike": {"rarity": "Common", "emoji": "<:spike:1509927513025937408>", "price": 1_300_000},
+    "spin":  {"rarity": "Common", "emoji": "<:spin:1509927644009992263>",  "price": 150_000},
+    "smoke": {"rarity": "Common", "emoji": "<:smoke:1509929541219647583>", "price": 2_400_000},
 }
 
 RARITY_ORDER = ["Mythical", "Legendary", "Epic", "Rare", "Uncommon", "Common"]
@@ -125,10 +136,18 @@ def save_data(data):
         json.dump(data, f, indent=4)
 
 def get_timer_emoji(guild: discord.Guild) -> str:
-    """Use animated timer if server has boost level 1+ (allows animated emoji), else static clock."""
     if guild and guild.premium_tier >= 1:
         return "<a:timer:1509939351126016173>"
     return "⏱️"
+
+def format_price(beli: int) -> str:
+    if beli >= 1_000_000:
+        val = beli / 1_000_000
+        return f"{val:g}M 🪙"
+    elif beli >= 1_000:
+        val = beli / 1_000
+        return f"{val:g}K 🪙"
+    return f"{beli:,} 🪙"
 
 # =========================
 # TIMER PARSER
@@ -156,14 +175,13 @@ def parse_time(time_str):
 # =========================
 def format_fruits(fruits):
     lines = []
-    current_rarity = None
     for rarity in RARITY_ORDER:
         rarity_fruits = [f for f in fruits if FRUIT_DATA[f]["rarity"] == rarity]
-        if not rarity_fruits:
-            continue
         for f in rarity_fruits:
+            price_str = format_price(FRUIT_DATA[f]["price"])
             lines.append(
-                f"{FRUIT_DATA[f]['emoji']} **{f.capitalize()}** {RARITY_EMOJI[rarity]} `{rarity}`"
+                f"{FRUIT_DATA[f]['emoji']} **{f.capitalize()}** "
+                f"{RARITY_EMOJI[rarity]} `{rarity}` · {price_str}"
             )
     return "\n".join(lines)
 
@@ -203,11 +221,11 @@ def build_embed(fruits, remaining, guild: discord.Guild = None):
         value=f"```\n{len(fruits)}\n```",
         inline=True
     )
-    embed.set_footer(text="Auto-updates every 5s • Blox Fruits Stock")
+    embed.set_footer(text="Auto-updates every 5s • King Legacy Stock")
     return embed
 
 # =========================
-# VIEW (AUTO-UPDATE, NO BUTTON)
+# VIEW
 # =========================
 class StockView(View):
     def __init__(self):
@@ -221,7 +239,6 @@ class Stock(commands.Cog):
         self.bot = bot
         self.check_timer.start()
 
-    # ── Permission check helper ──
     def is_permitted(self, ctx_or_interaction):
         if isinstance(ctx_or_interaction, discord.Interaction):
             user = ctx_or_interaction.user
@@ -235,10 +252,7 @@ class Stock(commands.Cog):
     # /perm SLASH COMMAND
     # =========================
     @discord.app_commands.command(name="perm", description="Grant or revoke stock management permission for a user.")
-    @discord.app_commands.describe(
-        action="grant or revoke",
-        user="The user to grant/revoke permission"
-    )
+    @discord.app_commands.describe(action="grant or revoke", user="Target user")
     @discord.app_commands.choices(action=[
         discord.app_commands.Choice(name="grant", value="grant"),
         discord.app_commands.Choice(name="revoke", value="revoke"),
@@ -278,7 +292,7 @@ class Stock(commands.Cog):
             await interaction.response.send_message(embed=embed, ephemeral=True)
 
     # =========================
-    # !addstock COMMAND
+    # !addstock
     # =========================
     @commands.command()
     async def addstock(self, ctx, *, fruits: str):
@@ -305,7 +319,6 @@ class Stock(commands.Cog):
             await ctx.send(embed=embed, delete_after=5)
             return
 
-        # Ask for timer
         prompt = discord.Embed(
             title="⏳ Set Timer",
             description="How long until stock resets?\n\nExamples: `1h 30m` · `90m` · `3600s`",
@@ -329,7 +342,7 @@ class Stock(commands.Cog):
             await ctx.send("❌ Invalid time format.", delete_after=5)
             return
 
-        # Delete old stock message if exists
+        # Delete old stock message
         if data.get("channel_id") and data.get("message_id"):
             try:
                 old_channel = self.bot.get_channel(data["channel_id"])
@@ -351,7 +364,7 @@ class Stock(commands.Cog):
         save_data(data)
 
     # =========================
-    # !stock COMMAND
+    # !stock
     # =========================
     @commands.command()
     async def stock(self, ctx):
@@ -371,35 +384,19 @@ class Stock(commands.Cog):
             embed=build_embed(data["fruits"], remaining, ctx.guild),
             view=StockView()
         )
-        # Track this new message for auto-update
         data["channel_id"] = ctx.channel.id
         data["message_id"] = sent.id
         save_data(data)
 
     # =========================
-    # !howstock COMMAND
+    # !howstock
     # =========================
     @commands.command()
     async def howstock(self, ctx):
-        embed = discord.Embed(
-            title="📘 How to Use Stock Bot",
-            color=0x5865F2
-        )
-        embed.add_field(
-            name="1️⃣ Add Stock",
-            value="`!addstock dragon, dough, flame`",
-            inline=False
-        )
-        embed.add_field(
-            name="2️⃣ Set Timer",
-            value="`1h 30m` · `90m` · `3600s`",
-            inline=False
-        )
-        embed.add_field(
-            name="3️⃣ View Stock",
-            value="`!stock`",
-            inline=False
-        )
+        embed = discord.Embed(title="📘 How to Use Stock Bot", color=0x5865F2)
+        embed.add_field(name="1️⃣ Add Stock", value="`!addstock dragon, dough, flame`", inline=False)
+        embed.add_field(name="2️⃣ Set Timer", value="`1h 30m` · `90m` · `3600s`", inline=False)
+        embed.add_field(name="3️⃣ View Stock", value="`!stock`", inline=False)
         embed.add_field(
             name="⚙️ System",
             value="• Auto countdown (updates every 5s)\n• 1 min warning\n• Auto reset on expire",
@@ -428,12 +425,11 @@ class Stock(commands.Cog):
         if not channel:
             return
 
-        # Auto-edit the stock message every 5s
+        # Edit message every 5s
         if data["fruits"] and remaining > 0:
             try:
                 msg = await channel.fetch_message(data["message_id"])
-                guild = channel.guild
-                await msg.edit(embed=build_embed(data["fruits"], remaining, guild))
+                await msg.edit(embed=build_embed(data["fruits"], remaining, channel.guild))
             except:
                 pass
 
@@ -452,7 +448,7 @@ class Stock(commands.Cog):
                     description="Stock has been reset. Waiting for new stock...",
                     color=0x2B2D31
                 )
-                expired_embed.set_footer(text="Blox Fruits Stock")
+                expired_embed.set_footer(text="King Legacy Stock")
                 await msg.edit(embed=expired_embed, view=None)
             except:
                 pass
