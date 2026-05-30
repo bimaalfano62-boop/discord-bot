@@ -43,13 +43,41 @@ class AI(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
+    # 🔥 SMART SEARCH: Clean query so Fandom doesn't get confused
     async def search(self, query):
+        query_lower = query.lower()
+        search_query = query
+        
+        # Remove specific mechanic words so Fandom searches for the ITEM, not the mechanic
+        words_to_clean = ["m1", "m2", "damage", "combo", "hit", "scaling", "how much", "dps"]
+        clean_query = query
+        for word in words_to_clean:
+            clean_query = re.sub(rf'\b{word}\b', '', clean_query, flags=re.IGNORECASE)
+        clean_query = clean_query.strip()
+
+        # Smart mapping based on context
+        if any(word in query_lower for word in ["gamepass", "robux", "buy", "pass", "spend"]):
+            search_query = "Gamepasses King Legacy"
+        elif any(word in query_lower for word in ["crew", "guild", "team", "create crew"]):
+            search_query = "Crews King Legacy"
+        elif any(word in query_lower for word in ["sword", "swords", "blade", "melee"]):
+            search_query = f"{clean_query} Swords King Legacy"
+        elif any(word in query_lower for word in ["accessories", "accessory"]):
+            search_query = f"{clean_query} Accessories King Legacy"
+        elif any(word in query_lower for word in ["race", "awakening", "skill"]):
+            search_query = f"{clean_query} Races King Legacy"
+        elif any(word in query_lower for word in ["boss", "spawn", "drop"]):
+            search_query = f"{clean_query} Bosses King Legacy"
+        else:
+            # Default: Use cleaned query + skills/stats to find the exact fruit/item page
+            search_query = f"{clean_query} skills stats King Legacy"
+
         try:
             async with aiohttp.ClientSession() as session:
                 params = {
                     "action": "query",
                     "list": "search",
-                    "srsearch": f"{query} King Legacy", 
+                    "srsearch": search_query, 
                     "format": "json"
                 }
                 async with session.get(API, params=params, headers=HEADERS, timeout=10) as res:
@@ -94,18 +122,28 @@ class AI(commands.Cog):
     async def ai_answer(self, question, context):
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
-            return "ERROR_ENV: OPENROUTER_API_KEY belum di-set di file .env lu!"
+            return "ERROR_ENV: OPENROUTER_API_KEY is not set in your .env file!"
 
         def fetch_ai():
             try:
-                # 🔥 PROMPT BARU: AI YANG BISA NGERANGKUM & NERANGIN
-                system_prompt = """You are a friendly, helpful Discord bot expert in the Roblox game 'King Legacy'. Your knowledge comes from the provided Wiki Data.
+                # 🔥 PROMPT: OPINIONATED & ANALYTICAL EXPERT
+                system_prompt = """You are a highly analytical, pro-player Discord bot expert in the Roblox game 'King Legacy'.
 
 HOW TO ANSWER:
-1. If the user asks "how to" do something (e.g., "how to join/create a crew"), READ the relevant Wiki Page carefully. Piece together the mechanics, features, requirements, and costs mentioned in the text, and explain it to the user in a friendly, step-by-step way.
-2. If the user asks for a CATEGORY (e.g., "easy mythical swords"), scan the Wiki Data, find matching items, and list them.
-3. DO NOT mix up King Legacy with Blox Fruits or other games.
-4. If the Wiki Data has absolutely zero relevant information about the topic, say: "I couldn't find info about that in the wiki bro 🤷". Otherwise, TRY YOUR BEST to explain using the available data."""
+1. You will be given Wiki Data. Read it carefully.
+2. If the user asks about specific stats, damage (like M1 damage), or moves: Extract the exact numbers/facts from the Wiki Data, then PROVIDE YOUR OPINION AND ANALYSIS. Is the damage good for its rarity? Is it viable for PvP/PvE? Is the move slow or fast? Give your take as an expert.
+3. If the user asks for recommendations, compare the items in the Wiki Data and recommend the best one based on their needs/budget, explaining WHY.
+4. If the user asks "how to" do something, piece together the steps from the Wiki Data.
+5. DO NOT just say "I couldn't find info" if the Wiki Data contains the relevant item page. Use logic to find the answer based on the data provided.
+6. DO NOT mix up King Legacy with Blox Fruits or other games. King Legacy does NOT have V4 race awakenings.
+7. ONLY say "I couldn't find info" if the Wiki Data is completely empty or has zero connection to the question.
+
+FORMATTING RULES:
+1. Be conversational, helpful, and analytical. Like a pro player giving advice.
+2. Use bullet points for lists and stats: • **Stat:** Value
+3. NEVER use markdown tables (| or ---).
+4. NEVER use horizontal rules (--- or *** or ___).
+5. Keep it readable in Discord."""
 
                 user_content = f"User's Question: {question}"
                 if context:
@@ -115,12 +153,12 @@ HOW TO ANSWER:
 
                 res = client.chat.completions.create(
                     model="openai/gpt-oss-20b", 
-                    # Kalau gpt-oss error, ganti ke: model="google/gemma-2-9b-it:free",
+                    # If gpt-oss errors, change to: model="google/gemma-2-9b-it:free",
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_content}
                     ],
-                    temperature=0.4, # Naikin dikit biar dia lebih kreatif ngerangkum jawaban
+                    temperature=0.6, # Higher temperature for better opinions/analysis
                     timeout=30, 
                     max_tokens=4096,
                     extra_headers={
@@ -209,10 +247,9 @@ HOW TO ANSWER:
             else:
                 embed.set_footer(text="No exact wiki match found")
 
-            # 🔥 FIX GAMBAR: Cuma ilangin gambar kalau AI bener2 bilang gak tau
             if image and i == 0:
                 if "couldn't find info" in answer.lower():
-                    pass # Jangan tampilin gambar kalau gagal
+                    pass 
                 else:
                     embed.set_image(url=image)
 
@@ -232,7 +269,7 @@ HOW TO ANSWER:
             color=discord.Color.blue()
         )
         embed.add_field(name="❓ How to Ask", value="Use `/question <your question>`\nExample: `/question How to get Dragon Fruit?`", inline=False)
-        embed.add_field(name="✅ Good Questions", value="• `/question What is the best sword for PvP?`\n• `/question How to create a crew?`", inline=False)
+        embed.add_field(name="✅ Good Questions", value="• `/question M1 Tree Fruit damage?`\n• `/question What gamepass should I buy with 10k robux?`", inline=False)
         embed.add_field(name="❌ Bad Questions", value="• `/question hi`\n• `/question what is roblox`", inline=False)
         
         await interaction.response.send_message(embed=embed)
