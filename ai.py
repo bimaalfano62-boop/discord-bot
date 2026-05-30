@@ -8,10 +8,10 @@ import random
 import re
 from openai import OpenAI
 
-# ================= SETUP AI GRATIS (GROQ) =================
+# ================= SETUP AI VIA OPENROUTER =================
 client = OpenAI(
-    api_key=os.getenv("GROQ_API_KEY"),
-    base_url="https://api.groq.com/openai/v1"
+    api_key=os.getenv("OPENROUTER_API_KEY"), # Ganti ke OpenRouter
+    base_url="https://openrouter.ai/api/v1"  # Ganti ke URL OpenRouter
 )
 # ==========================================================
 
@@ -117,9 +117,9 @@ class AI(commands.Cog):
             return None
 
     def ai_answer(self, question, context):
-        api_key = os.getenv("GROQ_API_KEY")
+        api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
-            return "ERROR_ENV: GROQ_API_KEY belum di-set di file .env lu!"
+            return "ERROR_ENV: OPENROUTER_API_KEY belum di-set di file .env lu!"
 
         try:
             system_prompt = """You are a Discord bot that formats game wiki data into a clean info card.
@@ -140,13 +140,19 @@ ABSOLUTE FORMATTING RULES:
 7. If a value is missing, just skip that point."""
 
             res = client.chat.completions.create(
-                # 🔥 FIXED: PAKAI GEMMA 2 (PALING STABIL, GRATIS, DIJAMIN GAK ERROR 403/404)
-                model="gemma2-9b-it", 
+                # 🔥 PAKAI GPT-OSS DI OPENROUTER
+                model="openai/gpt-oss-20b", 
+                # (Catatan: Kalau ini ternyata berbayar/blokir, lu bisa ganti ke -> "google/gemma-2-9b-it:free")
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Raw Wiki Text:\n{context[:3500]}\n\nFormat this into bullet points."}
                 ],
-                temperature=0.2
+                temperature=0.2,
+                extra_headers={
+                    # Ini wajib ditambahin buat OpenRouter biar gak error
+                    "HTTP-Referer": "https://discordbot.com", 
+                    "X-Title": "King Legacy Wiki Bot"
+                }
             )
             
             result = res.choices[0].message.content
@@ -295,4 +301,3 @@ ABSOLUTE FORMATTING RULES:
 async def setup(bot):
     bot.remove_command("help")
     await bot.add_cog(AI(bot))
-    
