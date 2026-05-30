@@ -312,6 +312,18 @@ class Stock(commands.Cog):
                 )
             )
 
+    # 🔥 ERROR HANDLER UNTUK !perm (BIAR GAK DIAM SAJA KALAU SALAH KETIK)
+    @perm.error
+    async def perm_error(self, ctx, error):
+        if isinstance(error, commands.MissingPermissions):
+            await ctx.send("🚫 Lu bukan Admin! Cuma Admin yang bisa pakai command ini.", delete_after=5)
+        elif isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send("❌ Format salah! Pakai: `!perm grant @user` atau `!perm revoke @user`", delete_after=5)
+        elif isinstance(error, commands.BadArgument):
+            await ctx.send("❌ User gak ditemukan! Pastikan lu nge-tag orangnya benar (contoh: `!perm grant @kash`)", delete_after=5)
+        else:
+            print(f"Error di !perm: {error}")
+
     # =========================
     # !addstock
     # =========================
@@ -431,7 +443,7 @@ class Stock(commands.Cog):
         )
         embed.add_field(
             name="🔐 Permissions",
-            value="Admins grant access with `/perm grant @user`",
+            value="Admins grant access with `!perm grant @user`",
             inline=False,
         )
         embed.set_footer(text="Separate fruits with commas!")
