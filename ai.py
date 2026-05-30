@@ -49,7 +49,7 @@ class AI(commands.Cog):
                 params = {
                     "action": "query",
                     "list": "search",
-                    "srsearch": query,
+                    "srsearch": f"{query} King Legacy", 
                     "format": "json"
                 }
                 async with session.get(API, params=params, headers=HEADERS, timeout=10) as res:
@@ -98,20 +98,14 @@ class AI(commands.Cog):
 
         def fetch_ai():
             try:
-                system_prompt = """You are an expert database query AI for the Roblox game 'King Legacy'. Your ONLY knowledge comes from the provided Wiki Data.
+                # 🔥 PROMPT BARU: AI YANG BISA NGERANGKUM & NERANGIN
+                system_prompt = """You are a friendly, helpful Discord bot expert in the Roblox game 'King Legacy'. Your knowledge comes from the provided Wiki Data.
 
-CORE LOGIC:
-1. If asked for a CATEGORY (e.g., "easy mythical swords", "best accessories"), scan ALL provided Wiki Pages. Find every item that matches the category, list them, and use their stats/drop rates to explain WHY they fit the category.
-2. If the user asks for a recommendation, give advice BASED ONLY on the stats/difficulty written in the Wiki Data.
+HOW TO ANSWER:
+1. If the user asks "how to" do something (e.g., "how to join/create a crew"), READ the relevant Wiki Page carefully. Piece together the mechanics, features, requirements, and costs mentioned in the text, and explain it to the user in a friendly, step-by-step way.
+2. If the user asks for a CATEGORY (e.g., "easy mythical swords"), scan the Wiki Data, find matching items, and list them.
 3. DO NOT mix up King Legacy with Blox Fruits or other games.
-4. If the Wiki Data doesn't mention the item, DO NOT invent it. Say: "The wiki doesn't mention this."
-
-FORMATTING RULES:
-1. Be conversational and helpful.
-2. Use bullet points for lists: • **Item Name:** Detail
-3. NEVER use markdown tables (| or ---).
-4. NEVER use horizontal rules (--- or *** or ___).
-5. Keep it readable in Discord."""
+4. If the Wiki Data has absolutely zero relevant information about the topic, say: "I couldn't find info about that in the wiki bro 🤷". Otherwise, TRY YOUR BEST to explain using the available data."""
 
                 user_content = f"User's Question: {question}"
                 if context:
@@ -126,7 +120,7 @@ FORMATTING RULES:
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_content}
                     ],
-                    temperature=0.1,
+                    temperature=0.4, # Naikin dikit biar dia lebih kreatif ngerangkum jawaban
                     timeout=30, 
                     max_tokens=4096,
                     extra_headers={
@@ -181,11 +175,8 @@ FORMATTING RULES:
         chunks.append(text)
         return chunks
 
-    # 🔥 SLASH COMMAND SUPER BERSIH (GAK BAKAL KENA LOG SAPPHIRE)
     @discord.app_commands.command(name="question", description="Ask anything about King Legacy")
     async def question(self, interaction: discord.Interaction, query: str):
-        # 1. Defer (Nampilin "Bot is thinking..." tanpa ngirim pesan apapun ke chat)
-        # thinking=True bikin Discord nampilin animasi "Bot is thinking..." secara native
         await interaction.response.defer(thinking=True)
         
         titles = await self.search(query)
@@ -199,7 +190,6 @@ FORMATTING RULES:
         answer = await self.ai_answer(question=query, context=data)
         
         if answer.startswith("ERROR_ENV") or answer.startswith("ERROR_API"):
-            # Kirim error cuma ke user yang nanya (ephemeral), gak ngotorin chat
             await interaction.followup.send(f"❌ **AI Error:** ```{answer}```", ephemeral=True)
             return
 
@@ -219,12 +209,15 @@ FORMATTING RULES:
             else:
                 embed.set_footer(text="No exact wiki match found")
 
+            # 🔥 FIX GAMBAR: Cuma ilangin gambar kalau AI bener2 bilang gak tau
             if image and i == 0:
-                embed.set_image(url=image)
+                if "couldn't find info" in answer.lower():
+                    pass # Jangan tampilin gambar kalau gagal
+                else:
+                    embed.set_image(url=image)
 
             embeds.append(embed)
 
-        # 2. Kirim jawaban final (Ini satu-satunya pesan yang bakal muncul di chat)
         if len(embeds) > 1:
             view = WikiView(embeds)
             await interaction.followup.send(embed=embeds[0], view=view)
@@ -239,7 +232,7 @@ FORMATTING RULES:
             color=discord.Color.blue()
         )
         embed.add_field(name="❓ How to Ask", value="Use `/question <your question>`\nExample: `/question How to get Dragon Fruit?`", inline=False)
-        embed.add_field(name="✅ Good Questions", value="• `/question What is the best sword for PvP?`\n• `/question Easy mythical swords to craft`", inline=False)
+        embed.add_field(name="✅ Good Questions", value="• `/question What is the best sword for PvP?`\n• `/question How to create a crew?`", inline=False)
         embed.add_field(name="❌ Bad Questions", value="• `/question hi`\n• `/question what is roblox`", inline=False)
         
         await interaction.response.send_message(embed=embed)
