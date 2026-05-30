@@ -140,7 +140,8 @@ ABSOLUTE FORMATTING RULES:
 7. If a value is missing, just skip that point."""
 
             res = client.chat.completions.create(
-                model="llama-3.1-70b-versatile", # Model paling pinter & gratis di Groq
+                # 🔥 FIXED: PAKAI MODEL TERBARU YANG MASIH AKTIF DI GROQ
+                model="llama3-groq-70b-8192", 
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Raw Wiki Text:\n{context[:3500]}\n\nFormat this into bullet points."}
