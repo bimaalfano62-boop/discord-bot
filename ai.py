@@ -20,6 +20,100 @@ HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
 }
 
+# =========================
+# MODALS (POP-UP FORMS)
+# =========================
+class SearchItemModal(discord.ui.Modal, title='🔍 Search Item'):
+    item_name = discord.ui.TextInput(
+        label='What item are you looking for?',
+        placeholder='e.g. Dragon Fruit, Night Blade...',
+        required=True
+    )
+    
+    def __init__(self, cog):
+        super().__init__()
+        self.cog = cog
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(thinking=True)
+        query = self.item_name.value
+        search_query = f"{query} King Legacy"
+        
+        titles = await self.cog.search(search_query)
+        data = await self.cog.get_data(titles)
+        answer = await self.cog.ai_answer(question=query, context=data, mode="search")
+        
+        await self.cog.send_response(interaction, query, answer, titles)
+
+class CompareModal(discord.ui.Modal, title='⚔️ Compare Items'):
+    items = discord.ui.TextInput(
+        label='Which items to compare?',
+        placeholder='e.g. Noirceur vs Night Blade...',
+        required=True
+    )
+    
+    def __init__(self, cog):
+        super().__init__()
+        self.cog = cog
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(thinking=True)
+        query = self.items.value
+        search_query = f"{query} King Legacy"
+        
+        titles = await self.cog.search(search_query)
+        data = await self.cog.get_data(titles)
+        answer = await self.cog.ai_answer(question=query, context=data, mode="compare")
+        
+        await self.cog.send_response(interaction, query, answer, titles)
+
+class SkillDamageModal(discord.ui.Modal, title='💥 Skill / Damage'):
+    query_input = discord.ui.TextInput(
+        label='What skill/damage info?',
+        placeholder='e.g. M1 Tree Fruit damage...',
+        required=True
+    )
+    
+    def __init__(self, cog):
+        super().__init__()
+        self.cog = cog
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(thinking=True)
+        query = self.query_input.value
+        search_query = f"{query} skills stats King Legacy"
+        
+        titles = await self.cog.search(search_query)
+        data = await self.cog.get_data(titles)
+        answer = await self.cog.ai_answer(question=query, context=data, mode="skill")
+        
+        await self.cog.send_response(interaction, query, answer, titles)
+
+
+# =========================
+# VIEW (DASHBOARD BUTTONS)
+# =========================
+class DashboardView(discord.ui.View):
+    def __init__(self, cog):
+        super().__init__(timeout=None)
+        self.cog = cog
+
+    @discord.ui.button(label="🔍 Search Item", style=discord.ButtonStyle.primary)
+    async def search_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(SearchItemModal(self.cog))
+
+    @discord.ui.button(label="⚔️ Compare", style=discord.ButtonStyle.success)
+    async def compare_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(CompareModal(self.cog))
+
+    @discord.ui.button(label="💥 Skill/Damage", style=discord.ButtonStyle.danger)
+    async def skill_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(SkillDamageModal(self.cog))
+
+
+# =========================
+# PAGINATION VIEW
+# =========================
 class WikiView(discord.ui.View):
     def __init__(self, embeds):
         super().__init__(timeout=180)
@@ -39,45 +133,15 @@ class WikiView(discord.ui.View):
         await interaction.response.edit_message(embed=self.embeds[self.index], view=self)
 
 
+# =========================
+# COG
+# =========================
 class AI(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # 🔥 SMART SEARCH: Clean query from conversational fluff
-    async def search(self, query):
-        query_lower = query.lower()
-        
-        # 1. Remove useless conversational words so Fandom focuses on the Nouns (Items)
-        filler_words = [
-            "which one is better", "which is better", "what is better", 
-            "should i buy", "should i get", "for pvp", "for pve", "for grinding",
-            "compared to", "vs", " or ", " and ", "the best", "better",
-            "damage", "m1", "scaling", "dps", "how much"
-        ]
-        clean_query = query
-        for word in filler_words:
-            clean_query = re.sub(re.escape(word), ' ', clean_query, flags=re.IGNORECASE)
-        
-        # Clean up double spaces
-        clean_query = re.sub(r'\s+', ' ', clean_query).strip()
-
-        # 2. Smart mapping based on context
-        search_query = clean_query
-        if any(word in query_lower for word in ["gamepass", "robux", "buy", "pass", "spend"]):
-            search_query = "Gamepasses King Legacy"
-        elif any(word in query_lower for word in ["crew", "guild", "team", "create crew"]):
-            search_query = "Crews King Legacy"
-        elif any(word in query_lower for word in ["sword", "swords", "blade", "melee"]):
-            search_query = f"{clean_query} Swords King Legacy"
-        elif any(word in query_lower for word in ["accessories", "accessory"]):
-            search_query = f"{clean_query} Accessories King Legacy"
-        elif any(word in query_lower for word in ["race", "awakening"]):
-            search_query = f"{clean_query} Races King Legacy"
-        elif any(word in query_lower for word in ["boss", "spawn", "drop"]):
-            search_query = f"{clean_query} Bosses King Legacy"
-        else:
-            search_query = f"{clean_query} skills stats King Legacy"
-
+    # ── Core Logic Functions ──────────────────────────────────
+    async def search(self, search_query):
         try:
             async with aiohttp.ClientSession() as session:
                 params = {
@@ -89,13 +153,13 @@ class AI(commands.Cog):
                 async with session.get(API, params=params, headers=HEADERS, timeout=10) as res:
                     data = await res.json()
                     results = data["query"]["search"]
-                    # Take top 5 results to make sure we catch both items in a comparison
                     return [r["title"] for r in results[:5]] if results else []
         except:
             return []
 
     async def get_data(self, titles):
         all_text = ""
+        if not titles: return None
         try:
             async with aiohttp.ClientSession() as session:
                 for title in titles:
@@ -120,38 +184,30 @@ class AI(commands.Cog):
                             if text:
                                 all_text += f"\n\n=== WIKI PAGE: {title} ===\n{text.strip()}"
                             
-                            if len(all_text) > 4500: # Increased slightly for comparisons
+                            if len(all_text) > 4500:
                                 break
         except:
             pass
         return all_text.strip() if all_text else None
 
-    async def ai_answer(self, question, context):
+    async def ai_answer(self, question, context, mode="search"):
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
             return "ERROR_ENV: OPENROUTER_API_KEY is not set in your .env file!"
 
+        # 🔥 DYNAMIC PROMPTS BASED ON DASHBOARD BUTTON
+        if mode == "compare":
+            system_prompt = """You are a highly analytical, pro-player Discord bot expert in 'King Legacy'.
+The user wants to COMPARE items. Find BOTH items in the Wiki Data. Compare their stats, skills, and usability for PvP/PvE. Give a clear verdict on which one wins and WHY. Be opinionated but logical. Do NOT mix up King Legacy with Blox Fruits."""
+        elif mode == "skill":
+            system_prompt = """You are a highly analytical, pro-player Discord bot expert in 'King Legacy'.
+The user wants to know about SKILLS or DAMAGE. Extract exact numbers, scaling, and cooldowns from the Wiki Data. Analyze if the damage is good for its rarity, if the move is fast or slow, and its viability in PvP/PvE. Do NOT mix up King Legacy with Blox Fruits."""
+        else: # Default search
+            system_prompt = """You are a friendly, expert gamer Discord bot expert in 'King Legacy'.
+The user is looking for general info about an item. Provide its stats, how to get it, and your pro-player opinion on whether it's worth using or buying. Do NOT mix up King Legacy with Blox Fruits."""
+
         def fetch_ai():
             try:
-                # 🔥 PROMPT: OPINIONATED, ANALYTICAL, & CAN COMPARE
-                system_prompt = """You are a highly analytical, pro-player Discord bot expert in the Roblox game 'King Legacy'.
-
-HOW TO ANSWER:
-1. You will be given Wiki Data. Read it carefully.
-2. **COMPARISONS:** If the user asks to compare items (e.g., "Noirceur vs Night Blade", "which is better for PvP"), find BOTH items in the Wiki Data. Compare their stats, skills, and usability. Give a clear opinion on which one wins and WHY based on the data.
-3. **MECHANICS:** If the user asks about specific stats/damage (like M1 damage), extract the numbers from the Wiki Data and give your analysis. Is it good? Is it slow?
-4. **RECOMMENDATIONS:** If the user asks what to buy, look at the prices and stats, and recommend the best value.
-5. DO NOT just say "I couldn't find info" if the Wiki Data contains the relevant item pages. Read the pages and use logic to find the answer.
-6. DO NOT mix up King Legacy with Blox Fruits or other games.
-7. ONLY say "I couldn't find info" if the Wiki Data is completely empty or has zero connection to the question.
-
-FORMATTING RULES:
-1. Be conversational, helpful, and analytical. Like a pro player giving advice.
-2. Use bullet points for lists and stats: • **Stat:** Value
-3. NEVER use markdown tables (| or ---).
-4. NEVER use horizontal rules (--- or *** or ___).
-5. Keep it readable in Discord."""
-
                 user_content = f"User's Question: {question}"
                 if context:
                     user_content = f"Wiki Data:\n{context[:4500]}\n\n{user_content}"
@@ -220,25 +276,14 @@ FORMATTING RULES:
         chunks.append(text)
         return chunks
 
-    @discord.app_commands.command(name="question", description="Ask anything about King Legacy")
-    async def question(self, interaction: discord.Interaction, query: str):
-        await interaction.response.defer(thinking=True)
-        
-        titles = await self.search(query)
-        data = None
-        main_title = None
-        
-        if titles:
-            main_title = titles[0]
-            data = await self.get_data(titles)
-        
-        answer = await self.ai_answer(question=query, context=data)
-        
+    # ── Response Sender ──────────────────────────────────
+    async def send_response(self, interaction, query, answer, titles):
         if answer.startswith("ERROR_ENV") or answer.startswith("ERROR_API"):
             await interaction.followup.send(f"❌ **AI Error:** ```{answer}```", ephemeral=True)
             return
 
         pages = self.chunk_text(answer)
+        main_title = titles[0] if titles else None
         image = await self.get_image(main_title) if main_title else None
 
         embeds = []
@@ -268,6 +313,24 @@ FORMATTING RULES:
         else:
             await interaction.followup.send(embed=embeds[0])
 
+
+    # =========================
+    # COMMANDS
+    # =========================
+    @discord.app_commands.command(name="question", description="Ask anything about King Legacy")
+    async def question(self, interaction: discord.Interaction):
+        embed = discord.Embed(
+            title="🍇 King Legacy Wiki Dashboard",
+            description="Select an option below to search the wiki using AI!",
+            color=0x5865F2
+        )
+        embed.add_field(name="🔍 Search Item", value="Look up general info, stats, and opinions.", inline=False)
+        embed.add_field(name="⚔️ Compare", value="Compare two items (e.g., Noirceur vs Night Blade).", inline=False)
+        embed.add_field(name="💥 Skill/Damage", value="Look up specific move damage, scaling, and viability.", inline=False)
+        
+        await interaction.response.send_message(embed=embed, view=DashboardView(self), ephemeral=False)
+
+
     @discord.app_commands.command(name="help", description="How to use the AI bot")
     async def help(self, interaction: discord.Interaction):
         embed = discord.Embed(
@@ -275,9 +338,9 @@ FORMATTING RULES:
             description="This bot uses AI to answer your questions based on the official King Legacy Wiki.", 
             color=discord.Color.blue()
         )
-        embed.add_field(name="❓ How to Ask", value="Use `/question <your question>`\nExample: `/question Noirceur vs Night Blade for PvP?`", inline=False)
-        embed.add_field(name="✅ Good Questions", value="• `/question M1 Tree Fruit damage?`\n• `/question What gamepass should I buy?`", inline=False)
-        embed.add_field(name="❌ Bad Questions", value="• `/question hi`\n• `/question what is roblox`", inline=False)
+        embed.add_field(name="❓ How to Ask", value="Use `/question` to open the dashboard, then pick a category!", inline=False)
+        embed.add_field(name="✅ Good Questions", value="• `/question` -> Compare -> Noirceur vs Night Blade\n• `/question` -> Skill -> M1 Tree Fruit damage", inline=False)
+        embed.add_field(name="❌ Bad Questions", value="• Asking outside the dashboard categories", inline=False)
         
         await interaction.response.send_message(embed=embed)
 
