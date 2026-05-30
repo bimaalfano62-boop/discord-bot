@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands, tasks
+from discord import app_commands
 from discord.ui import View
 import asyncio
 import json
@@ -50,7 +51,7 @@ FRUIT_DATA = {
     "allo":     {"rarity": "Rare", "emoji": "<:allo:1509940707908124905>",                             "price": 2_800_000},
     "brachio":  {"rarity": "Rare", "emoji": "<:brachio:1509940751788937426>",                             "price": 3_000_000},
     "spino":    {"rarity": "Rare", "emoji": "<:spino:1509940730846773298>",                             "price": 6_000_000},
-    "paw":     {"rarity": "Rare", "emoji": "<:paw:1509929487381299251>",                             "price": 1_500_000},
+    "paw":      {"rarity": "Rare", "emoji": "<:paw:1509929487381299251>",                              "price": 1_500_000},
 
     # ── Uncommon ──────────────────────────────────────────
     "shadow":      {"rarity": "Uncommon", "emoji": "<:shadow:1509929594969395303>", "price": 4_100_000},
@@ -256,27 +257,32 @@ class Stock(commands.Cog):
         return user.guild_permissions.administrator or has_stock_perm(guild_id, user.id)
         
     # =========================
-    # !perm
+    # /perm (SLASH COMMAND)
     # =========================
-    @commands.command()
-    @commands.guild_only()
-    @commands.has_permissions(administrator=True)
-    async def perm(self, ctx, action: str, user: discord.Member):
-        guild_id = ctx.guild.id
+    @app_commands.command(name="perm", description="Grant or revoke stock manager permission")
+    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.describe(action="Choose whether to grant or revoke", user="The user to update")
+    @app_commands.choices(action=[
+        app_commands.Choice(name="Grant", value="grant"),
+        app_commands.Choice(name="Revoke", value="revoke")
+    ])
+    async def perm(self, interaction: discord.Interaction, action: app_commands.Choice[str], user: discord.Member):
+        guild_id = interaction.guild.id
         perms    = load_perms(guild_id)
 
-        if action.lower() == "grant":
+        if action.value == "grant":
             if user.id in perms["allowed_users"]:
-                return await ctx.send(
+                return await interaction.response.send_message(
                     embed=discord.Embed(
                         title="⚠️ Already Granted",
                         description=f"{user.mention} already has stock permission.",
                         color=0xE67E22,
-                    )
+                    ),
+                    ephemeral=True
                 )
             perms["allowed_users"].append(user.id)
             save_perms(guild_id, perms)
-            await ctx.send(
+            await interaction.response.send_message(
                 embed=discord.Embed(
                     title="✅ Permission Granted",
                     description=f"{user.mention} can now manage stock.",
@@ -284,18 +290,19 @@ class Stock(commands.Cog):
                 )
             )
 
-        elif action.lower() == "revoke":
+        elif action.value == "revoke":
             if user.id not in perms["allowed_users"]:
-                return await ctx.send(
+                return await interaction.response.send_message(
                     embed=discord.Embed(
                         title="⚠️ Not Found",
                         description=f"{user.mention} doesn't have stock permission.",
                         color=0xE67E22,
-                    )
+                    ),
+                    ephemeral=True
                 )
             perms["allowed_users"].remove(user.id)
             save_perms(guild_id, perms)
-            await ctx.send(
+            await interaction.response.send_message(
                 embed=discord.Embed(
                     title="🚫 Permission Revoked",
                     description=f"{user.mention} can no longer manage stock.",
@@ -303,26 +310,14 @@ class Stock(commands.Cog):
                 )
             )
 
-        else:
-            await ctx.send(
-                embed=discord.Embed(
-                    title="❌ Invalid Action",
-                    description="Usage: `!perm grant @user` or `!perm revoke @user`",
-                    color=0xE74C3C,
-                )
-            )
-
-    # 🔥 ERROR HANDLER UNTUK !perm (BIAR GAK DIAM SAJA KALAU SALAH KETIK)
+    # 🔥 ERROR HANDLER FOR /perm
     @perm.error
-    async def perm_error(self, ctx, error):
-        if isinstance(error, commands.MissingPermissions):
-            await ctx.send("🚫 Lu bukan Admin! Cuma Admin yang bisa pakai command ini.", delete_after=5)
-        elif isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send("❌ Format salah! Pakai: `!perm grant @user` atau `!perm revoke @user`", delete_after=5)
-        elif isinstance(error, commands.BadArgument):
-            await ctx.send("❌ User gak ditemukan! Pastikan lu nge-tag orangnya benar (contoh: `!perm grant @kash`)", delete_after=5)
+    async def perm_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+        if isinstance(error, app_commands.CheckFailure):
+            if not interaction.response.is_done():
+                await interaction.response.send_message("🚫 You are not an Admin! Only Admins can use this command.", ephemeral=True)
         else:
-            print(f"Error di !perm: {error}")
+            print(f"Error in /perm: {error}")
 
     # =========================
     # !addstock
@@ -443,7 +438,7 @@ class Stock(commands.Cog):
         )
         embed.add_field(
             name="🔐 Permissions",
-            value="Admins grant access with `!perm grant @user`",
+            value="Admins grant access with `/perm`",
             inline=False,
         )
         embed.set_footer(text="Separate fruits with commas!")
