@@ -116,7 +116,6 @@ class AI(commands.Cog):
         except:
             return None
 
-    # 🔥 FIXED: AI PROMPT SUPER KETAT BUAT BIKIN BULLET POINT
     def ai_answer(self, question, context):
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
@@ -141,12 +140,12 @@ ABSOLUTE FORMATTING RULES:
 7. If a value is missing, just skip that point."""
 
             res = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model="llama-3.1-70b-versatile", # Model paling pinter & gratis di Groq
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Raw Wiki Text:\n{context[:3500]}\n\nFormat this into bullet points."}
                 ],
-                temperature=0.2 # Diturunin biar dia cuma ngikutin format, gak kreatif-kreatif banget
+                temperature=0.2
             )
             
             result = res.choices[0].message.content
@@ -158,12 +157,9 @@ ABSOLUTE FORMATTING RULES:
         except Exception as e:
             return f"ERROR_API: {type(e).__name__} - {str(e)[:200]}"
 
-    # 🔥 AUTO FORMATTER BUAT CADANGAN KALO AI MATI
     def format_raw_text(self, text):
-        # Kalau AI gagal, Python sendiri yang paksa bikin format per baris
-        # Misal teks: "Rarity Legendary Type Natural" -> dipecah per kata besar
         text = text.replace(' • ', '\n• ')
-        text = re.sub(r'([.!?])\s+', r'\1\n', text) # Pindah baris setelah titik
+        text = re.sub(r'([.!?])\s+', r'\1\n', text)
         return text
 
     def get_image(self, title):
@@ -219,7 +215,6 @@ ABSOLUTE FORMATTING RULES:
 
         answer = self.ai_answer(question=query, context=data)
         
-        # CEK KALO AI ERROR
         if answer.startswith("ERROR_ENV") or answer.startswith("ERROR_API"):
             embed = discord.Embed(
                 title="❌ AI System Error",
@@ -228,7 +223,6 @@ ABSOLUTE FORMATTING RULES:
             )
             await msg.edit(embed=embed)
             
-            # Pakai auto-formatter Python kalau AI mati
             raw_text = self.format_raw_text(data[:1500])
             raw_embed = discord.Embed(
                 title=f"📄 {title}",
@@ -241,14 +235,13 @@ ABSOLUTE FORMATTING RULES:
             await ctx.send(embed=raw_embed)
             return
 
-        # Kalau AI sukses
         pages = self.chunk_text(answer)
         image = self.get_image(title)
 
         embeds = []
         for i, p in enumerate(pages):
             embed = discord.Embed(
-                title=f"💡 {title}", # Pake judul wiki biar jelas
+                title=f"💡 {title}",
                 description=p,
                 color=discord.Color.green()
             )
