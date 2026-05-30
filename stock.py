@@ -501,6 +501,4 @@ class Stock(commands.Cog):
 # SETUP
 # =========================
 async def setup(bot: commands.Bot):
-    cog = Stock(bot)
     await bot.add_cog(cog)
-    bot.tree.add_command(cog.perm)
