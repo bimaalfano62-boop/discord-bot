@@ -10,7 +10,7 @@ from openai import OpenAI
 
 # ================= SETUP AI GRATIS (GROQ) =================
 client = OpenAI(
-    api_key=os.getenv("GROQ_API_KEY"), # Pastikan lu udah set env variable ini
+    api_key=os.getenv("GROQ_API_KEY"), # PASTIIN INI UDAH DI SET DI FILE .env
     base_url="https://api.groq.com/openai/v1"
 )
 # ==========================================================
@@ -36,9 +36,9 @@ loading_logs = [
 ]
 
 class WikiView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, embeds):
         super().__init__(timeout=180)
-        self.embeds = []
+        self.embeds = embeds
         self.index = 0
 
     @discord.ui.button(label="⬅️", style=discord.ButtonStyle.gray)
@@ -58,7 +58,6 @@ class AI(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # Ganti interaction jadi ctx (context) untuk prefix command
     async def fancy_loading(self, ctx):
         progress = 0
         embed = discord.Embed(title="🤖 AI Thinking...", description="Starting...", color=discord.Color.orange())
@@ -117,7 +116,14 @@ class AI(commands.Cog):
         except:
             return None
 
+    # 🔥 FIXED: AI ANSWER DENGAN ERROR LOG JELAS + FALLBACK
     def ai_answer(self, question, context):
+        # Cek dulu apakah API key ada
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            print("❌ ERROR: GROQ_API_KEY belum di-set di file .env!")
+            return None
+
         try:
             system_prompt = """You are a helpful Discord bot expert in the Roblox game 'King Legacy'. 
 The user will ask a question. You will be given context from the King Legacy Wiki.
@@ -132,16 +138,19 @@ CRITICAL RULES:
 6. Keep the answer concise and easy to read in Discord."""
 
             res = client.chat.completions.create(
-                model="llama-3.1-70b-versatile",
+                model="llama-3.1-8b-instant", # Model paling kenceng & stabil di Groq
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Context from Wiki:\n{context[:3000]}\n\nUser's Question: {question}"}
-                ]
+                ],
+                temperature=0.3 # Biar jawabannya akurat
             )
             return res.choices[0].message.content
+            
         except Exception as e:
-            print(f"AI Error: {e}")
-            return "Failed to generate answer."
+            # Print error sebenarnya di console biar lu tau kenapa gagal
+            print(f"❌ AI ERROR DETAIL: {type(e).__name__}: {e}")
+            return None # Return None biar trigger fallback
 
     def get_image(self, title):
         try:
@@ -171,9 +180,9 @@ CRITICAL RULES:
         chunks.append(text)
         return chunks
 
-    # 🔥 GANTI JADI PREFIX COMMAND !question
-    @commands.command(name="question", aliases=['q']) # Aliases: bisa pakai !q juga
-    async def question(self, ctx, *, query: str): # Tanda * wajib biar teks kebaca semua
+    # 🔥 PREFIX COMMAND !question
+    @commands.command(name="question", aliases=['q'])
+    async def question(self, ctx, *, query: str):
         msg = await self.fancy_loading(ctx)
 
         title = self.search(query)
@@ -187,9 +196,21 @@ CRITICAL RULES:
             return
 
         data = self.get_data(title)
+        
+        # Coba pakai AI dulu
         answer = self.ai_answer(question=query, context=data)
-        pages = self.chunk_text(answer)
+        
+        # FALLBACK: Kalau AI gagal/error, pakai teks wiki mentah tapi dipotong
+        if answer is None:
+            print("⚠️ AI Failed, using raw wiki fallback...")
+            answer = data[:1500] if data else "No data found."
+            source_text = "⚠️ AI failed, showing raw wiki data"
+            embed_color = discord.Color.orange()
+        else:
+            source_text = f"Source: {title} (AI Generated)"
+            embed_color = discord.Color.green()
 
+        pages = self.chunk_text(answer)
         image = self.get_image(title)
 
         embeds = []
@@ -197,24 +218,22 @@ CRITICAL RULES:
             embed = discord.Embed(
                 title=f"💡 Answering: {query[:50]}",
                 description=p,
-                color=discord.Color.green()
+                color=embed_color
             )
-            embed.set_footer(text=f"Source: {title}")
+            embed.set_footer(text=source_text)
 
             if image and i == 0:
                 embed.set_image(url=image)
 
             embeds.append(embed)
 
-        # Kasih view kalau halamannya lebih dari 1
         if len(embeds) > 1:
-            view = WikiView()
-            view.embeds = embeds
+            view = WikiView(embeds)
             await msg.edit(embed=embeds[0], view=view)
         else:
             await msg.edit(embed=embeds[0])
 
-    # 🔥 GANTI JADI PREFIX COMMAND !help
+    # 🔥 PREFIX COMMAND !help
     @commands.command(name="help")
     async def help(self, ctx):
         msg = await self.fancy_loading(ctx)
@@ -298,6 +317,6 @@ async def get_item_info(name: str):
 
 
 async def setup(bot):
-    # Matiin default help biar gak konflik sama !help kita
+    # Matiin default !help bawaan discord.py biar gak konflik
     bot.remove_command("help")
     await bot.add_cog(AI(bot))
