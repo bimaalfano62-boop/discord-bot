@@ -103,20 +103,19 @@ class AI(commands.Cog):
                 "format": "json"
             }).json()
 
-            # Pakai lxml parser biar lebih bersih
             soup = BeautifulSoup(res["parse"]["text"]["*"], "lxml")
 
-            # HAPUS SEMUA TABEL & ELEMENT YANG BIKIN BERANTAKAN
+            # Hapus element sampah doang, jangan terlalu agresif ngefilter teks
             for tag in soup.find_all(['table', 'aside', 'script', 'style', 'nav']):
                 tag.decompose()
 
             text = ""
             for tag in soup.find_all(["p", "li"]):
                 t = tag.get_text(" ", strip=True)
-                if t and len(t) > 15:  # Skip baris yang terlalu pendek (kayak "399", "Bundle", dll)
+                if t:
                     text += t + "\n"
 
-            # Bersihin spasi ganda & enter berlebih
+            # Bersihin spasi ganda
             text = re.sub(r'\n{3,}', '\n\n', text)
             text = re.sub(r' +', ' ', text)
 
@@ -124,7 +123,7 @@ class AI(commands.Cog):
         except:
             return None
 
-    # 🔥 FIXED: AI ANSWER DENGAN PROMPT SUPER KETAT
+    # 🔥 FIXED: AI YANG SANTAI & NGALIR
     def ai_answer(self, question, context):
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
@@ -132,34 +131,34 @@ class AI(commands.Cog):
             return None
 
         try:
-            system_prompt = """You are a Discord bot that answers questions about the Roblox game 'King Legacy'.
+            system_prompt = """You are a chill, helpful Discord bot who is an expert in the Roblox game 'King Legacy'. 
 
-INPUT: You will receive messy/ugly raw text scraped from the King Legacy Wiki.
-TASK: Extract the relevant info to answer the user's question, then format it beautifully for Discord.
+Your job:
+1. Read the messy raw wiki text provided.
+2. Answer the user's question based on that text.
 
-ABSOLUTE RULES (READ CAREFULLY):
-1. Output ONLY Discord-friendly markdown.
-2. NEVER output raw CSV, raw table data, or separated words like "Bundle" "Price" "399" on different lines.
-3. Combine stats into clean key-value pairs: **Rarity:** Mythical | **Price:** 399 Robux
-4. NEVER use markdown tables (no | or ---).
-5. NEVER use horizontal rules (no --- or *** or ___).
-6. Use bullet points (•) for lists.
-7. If the text is too messy, summarize ONLY the important points.
-8. Do NOT repeat the same info twice.
-9. Keep it SHORT and CLEAN."""
+STYLE RULES:
+- Talk like a friendly gamer, NOT a robot or Wikipedia article.
+- Keep it conversational, relaxed, and easy to read.
+- Combine messy stats into clean formats (e.g., **Rarity:** Mythical | **Price:** 399 Robux).
+- NEVER use markdown tables (no | or ---).
+- NEVER use horizontal rules (no --- or *** or ___).
+- Use bullet points (•) or emojis if it helps readability.
+- If the text doesn't contain the answer, just say "Couldn't find that in the wiki bro 🤷"
+- Do NOT repeat the same info."""
 
             res = client.chat.completions.create(
-                model="llama-3.1-70b-versatile", # Pakai 70b biar otaknya kuat bersihin data sampah
+                model="llama-3.1-8b-instant", # Kembali ke 8b biar super kenceng & jarang timeout
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Raw Wiki Text:\n{context[:3500]}\n\nUser's Question: {question}"}
                 ],
-                temperature=0.2 # Rendahin kreativitas biar fokus ngerapihin
+                temperature=0.6 # Naikin dikiti biar gaya bahasanya lebih natural/santai
             )
             
             result = res.choices[0].message.content
             
-            # Post-cleaning: Kalau AI masih bandel nge-spam garis
+            # Post-cleaning kalau AI masih nge-spam garis
             result = re.sub(r'^[-=_*]{3,}$', '', result, flags=re.MULTILINE)
             result = re.sub(r'\n{3,}', '\n\n', result)
             
@@ -206,7 +205,7 @@ ABSOLUTE RULES (READ CAREFULLY):
         if not title:
             await msg.edit(embed=discord.Embed(
                 title="❌ Not Found",
-                description="I couldn't find any relevant wiki page for your question.",
+                description="Couldn't find any relevant wiki page for that, bro. 🤷",
                 color=discord.Color.red()
             ))
             return
@@ -220,7 +219,7 @@ ABSOLUTE RULES (READ CAREFULLY):
             source_text = "⚠️ AI failed, showing raw wiki data"
             embed_color = discord.Color.orange()
         else:
-            source_text = f"Source: {title} (AI Generated)"
+            source_text = f"Source: {title}"
             embed_color = discord.Color.green()
 
         pages = self.chunk_text(answer)
@@ -282,3 +281,4 @@ ABSOLUTE RULES (READ CAREFULLY):
 async def setup(bot):
     bot.remove_command("help")
     await bot.add_cog(AI(bot))
+    
