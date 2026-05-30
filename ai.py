@@ -281,4 +281,3 @@ STYLE RULES:
 async def setup(bot):
     bot.remove_command("help")
     await bot.add_cog(AI(bot))
-    
