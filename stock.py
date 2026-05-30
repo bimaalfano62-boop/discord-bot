@@ -254,64 +254,62 @@ class Stock(commands.Cog):
             user     = ctx_or_interaction.author
             guild_id = ctx_or_interaction.guild.id
         return user.guild_permissions.administrator or has_stock_perm(guild_id, user.id)
-
+        
     # =========================
-    # /perm
+    # !perm
     # =========================
-    @discord.app_commands.command(
-        name="perm",
-        description="Grant or revoke stock management permission for a user. (Admin only)"
-    )
-    @discord.app_commands.describe(
-        action="Choose grant or revoke",
-        user="The target user"
-    )
-    @discord.app_commands.choices(action=[
-        discord.app_commands.Choice(name="grant",  value="grant"),
-        discord.app_commands.Choice(name="revoke", value="revoke"),
-    ])
-    @discord.app_commands.default_permissions(administrator=True)
-    @discord.app_commands.guild_only()
-    async def perm(
-        self,
-        interaction: discord.Interaction,
-        action: discord.app_commands.Choice[str],
-        user: discord.Member,
-    ):
-        guild_id = interaction.guild_id
+    @commands.command()
+    @commands.guild_only()
+    @commands.has_permissions(administrator=True)
+    async def perm(self, ctx, action: str, user: discord.Member):
+        guild_id = ctx.guild.id
         perms    = load_perms(guild_id)
-        val      = action.value
 
-        if val == "grant":
+        if action.lower() == "grant":
             if user.id in perms["allowed_users"]:
-                return await interaction.response.send_message(
-                    f"⚠️ {user.mention} already has stock permission.", ephemeral=True
+                return await ctx.send(
+                    embed=discord.Embed(
+                        title="⚠️ Already Granted",
+                        description=f"{user.mention} already has stock permission.",
+                        color=0xE67E22,
+                    )
                 )
             perms["allowed_users"].append(user.id)
             save_perms(guild_id, perms)
-            await interaction.response.send_message(
+            await ctx.send(
                 embed=discord.Embed(
                     title="✅ Permission Granted",
                     description=f"{user.mention} can now manage stock.",
                     color=0x2ECC71,
-                ),
-                ephemeral=True,
+                )
             )
 
-        elif val == "revoke":
+        elif action.lower() == "revoke":
             if user.id not in perms["allowed_users"]:
-                return await interaction.response.send_message(
-                    f"⚠️ {user.mention} doesn't have stock permission.", ephemeral=True
+                return await ctx.send(
+                    embed=discord.Embed(
+                        title="⚠️ Not Found",
+                        description=f"{user.mention} doesn't have stock permission.",
+                        color=0xE67E22,
+                    )
                 )
             perms["allowed_users"].remove(user.id)
             save_perms(guild_id, perms)
-            await interaction.response.send_message(
+            await ctx.send(
                 embed=discord.Embed(
                     title="🚫 Permission Revoked",
                     description=f"{user.mention} can no longer manage stock.",
                     color=0xE74C3C,
-                ),
-                ephemeral=True,
+                )
+            )
+
+        else:
+            await ctx.send(
+                embed=discord.Embed(
+                    title="❌ Invalid Action",
+                    description="Usage: `!perm grant @user` or `!perm revoke @user`",
+                    color=0xE74C3C,
+                )
             )
 
     # =========================
