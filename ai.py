@@ -21,7 +21,7 @@ HEADERS = {
 }
 
 def segmented_bar(percent: int, segments: int = 12):
-    filled = int((percent / 100) * segments) # Fix bug kurung
+    filled = int((percent / 100) * segments)
     empty = segments - filled
     return "▰" * filled + "▱" * empty
 
@@ -131,6 +131,7 @@ class AI(commands.Cog):
             print(f"❌ Parse Error: {e}")
             return None
 
+    # 🔥 FIXED: AI YANG BISA NJAWAB PERTANYAAN OPINI/REKOMENDASI
     async def ai_answer(self, question, context):
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
@@ -138,41 +139,49 @@ class AI(commands.Cog):
 
         def fetch_ai():
             try:
-                system_prompt = """You are a Discord bot that formats game wiki data into a clean info card.
+                # Prompt baru: AI disuruh jadi ahli game yang bisa ngasih rekomendasi
+                system_prompt = """You are a chill, expert gamer Discord bot who specializes in the Roblox game 'King Legacy'.
 
-INPUT: You will receive messy raw text from the King Legacy Wiki.
-TASK: Extract the important stats/info and format it perfectly for Discord.
+Your job:
+1. You will be given raw text data from the King Legacy Wiki.
+2. The user will ask a question. It might be a factual question OR a recommendation/opinion question (like "what should I buy?").
+3. Answer the user's question based on the wiki data provided. If it's a recommendation, give your best advice based on the stats/info.
 
-ABSOLUTE FORMATTING RULES:
-1. You MUST use bullet points for EVERY piece of information.
-2. Format: • **Category:** Value (Example: • **Rarity:** Legendary)
-3. For skills or lists, use indented sub-bullets:
-   • **Skills:**
-     - [Z] Skill Name: Description
-     - [X] Skill Name: Description
-4. NEVER use markdown tables (| or ---).
-5. NEVER use horizontal rules (--- or ***).
-6. NEVER write long paragraphs. Keep it strictly point-by-point.
-7. Be VERY DETAILED. List ALL skills, stats, and drops if available. Do not summarize too much.
-8. If a value is missing, just skip that point."""
+FORMATTING RULES:
+1. Be conversational, helpful, and chill. Like a friendly gamer giving advice.
+2. Use bullet points for stats or lists: • **Category:** Value
+3. NEVER use markdown tables (| or ---).
+4. NEVER use horizontal rules (--- or *** or ___).
+5. If the wiki text doesn't contain the answer, say "I couldn't find exact info on that in the wiki, but based on my knowledge..." and give a general answer.
+6. Keep it detailed but easy to read in Discord."""
+
+                # Kalau ada konteks wiki, kirim. Kalau gak ada, tetep jawab pake pengetahuan umum AI
+                user_content = f"User's Question: {question}"
+                if context:
+                    user_content = f"Raw Wiki Data:\n{context[:3000]}\n\n{user_content}"
 
                 res = client.chat.completions.create(
                     model="openai/gpt-oss-20b", 
-                    # Kalau gpt-oss error, ganti ke: model="google/gemma-2-9b-it:free",
+                    # Kalau gpt-oss error/gak mau, ganti baris atas jadi: model="google/gemma-2-9b-it:free",
                     messages=[
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Raw Wiki Text:\n{context[:3500]}\n\nFormat this into bullet points. Be detailed."}
+                        {"role": "user", "content": user_content}
                     ],
-                    temperature=0.2,
-                    timeout=30, # Naikkin dikit timeoutnya biar AI sempat nulis panjang
-                    max_tokens=4096, # 🔥 INI RAHASIANYA: Biar AI bisa nulis sampai 4000+ kata (banyak halaman)
+                    temperature=0.6, # Naikin dikiti biar kreatif ngasih rekomendasi
+                    timeout=30, 
+                    max_tokens=4096,
                     extra_headers={
                         "HTTP-Referer": "https://discordbot.com", 
                         "X-Title": "King Legacy Wiki Bot"
                     }
                 )
                 
+                # 🔥 FIX ERROR: CEK KALO RESPONSE NONE
                 result = res.choices[0].message.content
+                if result is None:
+                    return "ERROR_API: AI returned empty response."
+                
+                # Bersihin format
                 result = re.sub(r'^[-=_*]{3,}$', '', result, flags=re.MULTILINE)
                 result = re.sub(r'\n{3,}', '\n\n', result)
                 return result.strip()
@@ -225,66 +234,44 @@ ABSOLUTE FORMATTING RULES:
         msg = await self.fancy_loading(ctx)
 
         title = await self.search(query)
+        data = None
         
-        if not title:
-            await msg.edit(embed=discord.Embed(
-                title="❌ Not Found",
-                description="Couldn't find any relevant wiki page for that, bro. 🤷",
-                color=discord.Color.red()
-            ))
-            return
-
-        data = await self.get_data(title)
-        if not data:
-            await msg.edit(embed=discord.Embed(
-                title="❌ Scrape Failed",
-                description="Bot berhasil nemu halaman wiki, tapi gagal baca isinya.",
-                color=discord.Color.red()
-            ))
-            return
-
+        if title:
+            data = await self.get_data(title)
+        
+        # AI tetep dipanggil walau gak nemu wiki, biar bisa jawab pake pengetahuan umum
         answer = await self.ai_answer(question=query, context=data)
         
         if answer.startswith("ERROR_ENV") or answer.startswith("ERROR_API"):
             embed = discord.Embed(
                 title="❌ AI System Error",
-                description=f"```{answer}```\n\n**Using auto-formatter...**",
+                description=f"```{answer}```",
                 color=discord.Color.red()
             )
             await msg.edit(embed=embed)
-            
-            raw_text = self.format_raw_text(data[:1500])
-            raw_embed = discord.Embed(
-                title=f"📄 {title}",
-                description=raw_text,
-                color=discord.Color.orange()
-            )
-            image = await self.get_image(title)
-            if image: raw_embed.set_image(url=image)
-            
-            await ctx.send(embed=raw_embed)
             return
 
-        # Pecah teks per 1000 karakter buat bikin halaman
         pages = self.chunk_text(answer)
-        image = await self.get_image(title)
+        image = await self.get_image(title) if title else None
 
         embeds = []
         for i, p in enumerate(pages):
             embed = discord.Embed(
-                title=f"💡 {title} (Page {i+1}/{len(pages)})", # 🔥 TAMBAHIN INDIKATOR HALAMAN
+                title=f"💡 {query[:50]}" if len(pages) == 1 else f"💡 {query[:50]} (Page {i+1}/{len(pages)})",
                 description=p,
                 color=discord.Color.green()
             )
-            embed.set_footer(text=f"Source: King Legacy Wiki")
+            
+            if title:
+                embed.set_footer(text=f"Source: {title}")
+            else:
+                embed.set_footer(text="AI General Knowledge")
 
-            # Gamblang cuma muncul di halaman pertama
             if image and i == 0:
                 embed.set_image(url=image)
 
             embeds.append(embed)
 
-        # 🔥 KALO LEBIH DARI 1 HALAMAN, MUNCULIN TOMBOL NEXT
         if len(embeds) > 1:
             view = WikiView(embeds)
             await msg.edit(embed=embeds[0], view=view)
@@ -307,7 +294,7 @@ ABSOLUTE FORMATTING RULES:
         )
         embed.add_field(
             name="✅ Good Questions", 
-            value="• `!question What is the best sword for PvP?`\n• `!question Where to find Quake fruit?`", 
+            value="• `!question What is the best sword for PvP?`\n• `!question I have 1k robux, what should I buy?`", 
             inline=False
         )
         embed.add_field(
