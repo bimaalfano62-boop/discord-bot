@@ -97,8 +97,6 @@ class AI(commands.Cog):
                     data = await res.json()
                     results = data["query"]["search"]
                     return results[0]["title"] if results else None
-        except asyncio.TimeoutError:
-            return None
         except:
             return None
 
@@ -132,19 +130,22 @@ class AI(commands.Cog):
 
         def fetch_ai():
             try:
-                # 🔥 STRICT PROMPT: CUMA BOLEH PAKAI DATA WIKI
-                system_prompt = """You are a Discord bot expert in the Roblox game 'King Legacy'. You are chill and conversational.
+                # 🔥 PROMPT YANG LEBIH LUWES TAPI TETEP BERDASAR WIKI
+                system_prompt = """You are a chill, expert gamer Discord bot who specializes in the Roblox game 'King Legacy'.
 
-CRITICAL RULE: You ONLY know things based on the provided Wiki Data. You have NO outside knowledge.
-- If the user asks for recommendations/opinions (like "what should I buy?"), give advice, BUT you MUST base it strictly on the stats/info from the Wiki Data.
-- If the Wiki Data does not contain the answer, say: "I couldn't find info about that in the wiki bro 🤷"
-- NEVER use outside knowledge or make things up.
+Your knowledge strictly comes from the provided Wiki Data.
+- If the user asks for FACTS, answer based on the wiki.
+- If the user asks for RECOMMENDATIONS or OPINIONS (like "what should I buy?", "which is better?"), LOOK at the stats, prices, and descriptions in the Wiki Data, and use logic to give them the best advice. 
+- For example, if they ask what to buy with 1k robux, check the prices of gamepasses in the text, and recommend the best value based on the wiki description.
+- DO NOT say you can't find info if there are relevant items in the text. Just give your recommendation!
+- ONLY say "I couldn't find info about that in the wiki bro 🤷" if the Wiki Data is completely empty or has zero connection to the question.
 
 FORMATTING RULES:
-1. Use bullet points for stats or lists: • **Category:** Value
-2. NEVER use markdown tables (| or ---).
-3. NEVER use horizontal rules (--- or *** or ___).
-4. Keep it readable and friendly."""
+1. Be conversational, helpful, and chill. Like a friendly gamer giving advice.
+2. Use bullet points for stats or lists: • **Category:** Value
+3. NEVER use markdown tables (| or ---).
+4. NEVER use horizontal rules (--- or *** or ___).
+5. Keep it detailed but easy to read in Discord."""
 
                 user_content = f"User's Question: {question}"
                 if context:
@@ -159,7 +160,7 @@ FORMATTING RULES:
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_content}
                     ],
-                    temperature=0.4, 
+                    temperature=0.6, # Naikin dikit biar kreatif ngasih rekomendasi
                     timeout=30, 
                     max_tokens=4096,
                     extra_headers={
