@@ -16,8 +16,6 @@ client = OpenAI(
 # ==========================================================
 
 API = "https://king-legacy-official.fandom.com/api.php"
-
-# Wajib pakai headers biar Fandom gak nge-block bot
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
 }
@@ -95,15 +93,10 @@ class AI(commands.Cog):
                 "format": "json"
             }, headers=HEADERS).json()
             results = res["query"]["search"]
-            if results:
-                print(f"🔎 Found title: {results[0]['title']}")
-                return results[0]["title"]
-            return None
-        except Exception as e:
-            print(f"❌ Search Error: {e}")
+            return results[0]["title"] if results else None
+        except:
             return None
 
-    # 🔥 FIXED: SCRAPER YANG LEBIH AMAN + DEBUG
     def get_data(self, title):
         try:
             res = requests.get(API, params={
@@ -113,37 +106,21 @@ class AI(commands.Cog):
                 "format": "json"
             }, headers=HEADERS).json()
 
-            # Cek kalau Fandom nolak / error
             if "parse" not in res or "text" not in res["parse"]:
-                print(f"❌ Fandom API Error: {res}")
                 return None
 
-            html = res["parse"]["text"]["*"]
-            # Ganti lxml jadi html.parser biar lebih stabil
-            soup = BeautifulSoup(html, "html.parser")
-
-            # Ambil semua teks, gabung pake spasi
+            soup = BeautifulSoup(res["parse"]["text"]["*"], "html.parser")
             text = soup.get_text(separator=' ', strip=True)
-            
-            # Bersihin spasi ganda
             text = re.sub(r'\s+', ' ', text)
-
-            if text:
-                print(f"✅ Scrape success! Length: {len(text)} characters.")
-                return text
-            else:
-                print("⚠️ Scrape result is empty!")
-                return None
-                
-        except Exception as e:
-            print(f"❌ Scrape Exception: {e}")
+            return text.strip() if text else None
+        except:
             return None
 
+    # 🔥 FIXED: AI YANG NGASIH TAU ERROR LANGSUNG DI DISCORD
     def ai_answer(self, question, context):
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
-            print("❌ ERROR: GROQ_API_KEY belum di-set di file .env!")
-            return None
+            return "ERROR_ENV: GROQ_API_KEY belum di-set di file .env lu!"
 
         try:
             system_prompt = """You are a chill, helpful Discord bot who is an expert in the Roblox game 'King Legacy'. 
@@ -163,7 +140,7 @@ STYLE RULES:
 - Do NOT repeat the same info."""
 
             res = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model="llama3-8b-8192", # Model paling stabil di Groq
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Raw Wiki Text:\n{context[:3500]}\n\nUser's Question: {question}"}
@@ -172,16 +149,14 @@ STYLE RULES:
             )
             
             result = res.choices[0].message.content
-            
-            # Post-cleaning kalau AI masih nge-spam garis
             result = re.sub(r'^[-=_*]{3,}$', '', result, flags=re.MULTILINE)
             result = re.sub(r'\n{3,}', '\n\n', result)
             
             return result.strip()
             
         except Exception as e:
-            print(f"❌ AI ERROR DETAIL: {type(e).__name__}: {e}")
-            return None
+            # Langsung return errornya biar muncul di Discord
+            return f"ERROR_API: {type(e).__name__} - {str(e)[:200]}"
 
     def get_image(self, title):
         try:
@@ -226,20 +201,40 @@ STYLE RULES:
             return
 
         data = self.get_data(title)
+        if not data:
+            await msg.edit(embed=discord.Embed(
+                title="❌ Scrape Failed",
+                description="Bot berhasil nemu halaman wiki, tapi gagal baca isinya.",
+                color=discord.Color.red()
+            ))
+            return
+
         answer = self.ai_answer(question=query, context=data)
         
-        if answer is None:
-            print("⚠️ AI Failed, using raw wiki fallback...")
-            # Fallback dipercantik
-            fallback_text = data[:1500] if data else "Couldn't read the wiki page. It might be empty or blocked."
-            source_text = "⚠️ AI failed, showing raw wiki data"
-            embed_color = discord.Color.orange()
-        else:
-            fallback_text = answer
-            source_text = f"Source: {title}"
-            embed_color = discord.Color.green()
+        # 🔥 CEK KALO AI ERROR
+        if answer.startswith("ERROR_ENV") or answer.startswith("ERROR_API"):
+            embed = discord.Embed(
+                title="❌ AI System Error",
+                description=f"```{answer}```\n\n**Falling back to raw wiki...**",
+                color=discord.Color.red()
+            )
+            await msg.edit(embed=embed)
+            
+            # Kirim raw wiki sebagai fallback
+            raw_text = data[:1500]
+            raw_embed = discord.Embed(
+                title=f"📄 Raw: {title}",
+                description=raw_text,
+                color=discord.Color.orange()
+            )
+            image = self.get_image(title)
+            if image: raw_embed.set_image(url=image)
+            
+            await ctx.send(embed=raw_embed)
+            return
 
-        pages = self.chunk_text(fallback_text)
+        # Kalau AI sukses
+        pages = self.chunk_text(answer)
         image = self.get_image(title)
 
         embeds = []
@@ -247,9 +242,9 @@ STYLE RULES:
             embed = discord.Embed(
                 title=f"💡 {query[:50]}",
                 description=p,
-                color=embed_color
+                color=discord.Color.green()
             )
-            embed.set_footer(text=source_text)
+            embed.set_footer(text=f"Source: {title}")
 
             if image and i == 0:
                 embed.set_image(url=image)
