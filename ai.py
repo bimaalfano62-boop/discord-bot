@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-import requests
+import aiohttp
 from bs4 import BeautifulSoup
 import os
 import asyncio
@@ -10,8 +10,8 @@ from openai import OpenAI
 
 # ================= SETUP AI VIA OPENROUTER =================
 client = OpenAI(
-    api_key=os.getenv("OPENROUTER_API_KEY"), # Ganti ke OpenRouter
-    base_url="https://openrouter.ai/api/v1"  # Ganti ke URL OpenRouter
+    api_key=os.getenv("OPENROUTER_API_KEY"),
+    base_url="https://openrouter.ai/api/v1"
 )
 # ==========================================================
 
@@ -21,7 +21,7 @@ HEADERS = {
 }
 
 def segmented_bar(percent: int, segments: int = 12):
-    filled = int((percent / 100) * segments)
+    filled = int((percent / 100) * segments) # Fix bug kurung
     empty = segments - filled
     return "▰" * filled + "▱" * empty
 
@@ -84,45 +84,61 @@ class AI(commands.Cog):
 
         return msg
 
-    def search(self, query):
+    async def search(self, query):
         try:
-            res = requests.get(API, params={
-                "action": "query",
-                "list": "search",
-                "srsearch": query,
-                "format": "json"
-            }, headers=HEADERS).json()
-            results = res["query"]["search"]
-            return results[0]["title"] if results else None
-        except:
+            async with aiohttp.ClientSession() as session:
+                params = {
+                    "action": "query",
+                    "list": "search",
+                    "srsearch": query,
+                    "format": "json"
+                }
+                async with session.get(API, params=params, headers=HEADERS, timeout=10) as res:
+                    data = await res.json()
+                    results = data["query"]["search"]
+                    return results[0]["title"] if results else None
+        except asyncio.TimeoutError:
+            print("❌ Wiki Search Timeout")
+            return None
+        except Exception as e:
+            print(f"❌ Search Error: {e}")
             return None
 
-    def get_data(self, title):
+    async def get_data(self, title):
         try:
-            res = requests.get(API, params={
-                "action": "parse",
-                "page": title,
-                "prop": "text",
-                "format": "json"
-            }, headers=HEADERS).json()
+            async with aiohttp.ClientSession() as session:
+                params = {
+                    "action": "parse",
+                    "page": title,
+                    "prop": "text",
+                    "format": "json"
+                }
+                async with session.get(API, params=params, headers=HEADERS, timeout=10) as res:
+                    data = await res.json()
 
-            if "parse" not in res or "text" not in res["parse"]:
-                return None
+                    if "parse" not in data or "text" not in data["parse"]:
+                        return None
 
-            soup = BeautifulSoup(res["parse"]["text"]["*"], "html.parser")
-            text = soup.get_text(separator=' ', strip=True)
-            text = re.sub(r'\s+', ' ', text)
-            return text.strip() if text else None
-        except:
+                    html = data["parse"]["text"]["*"]
+                    soup = BeautifulSoup(html, "html.parser")
+                    text = soup.get_text(separator=' ', strip=True)
+                    text = re.sub(r'\s+', ' ', text)
+                    return text.strip() if text else None
+        except asyncio.TimeoutError:
+            print("❌ Wiki Parse Timeout")
+            return None
+        except Exception as e:
+            print(f"❌ Parse Error: {e}")
             return None
 
-    def ai_answer(self, question, context):
+    async def ai_answer(self, question, context):
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
             return "ERROR_ENV: OPENROUTER_API_KEY belum di-set di file .env lu!"
 
-        try:
-            system_prompt = """You are a Discord bot that formats game wiki data into a clean info card.
+        def fetch_ai():
+            try:
+                system_prompt = """You are a Discord bot that formats game wiki data into a clean info card.
 
 INPUT: You will receive messy raw text from the King Legacy Wiki.
 TASK: Extract the important stats/info and format it perfectly for Discord.
@@ -137,51 +153,58 @@ ABSOLUTE FORMATTING RULES:
 4. NEVER use markdown tables (| or ---).
 5. NEVER use horizontal rules (--- or ***).
 6. NEVER write long paragraphs. Keep it strictly point-by-point.
-7. If a value is missing, just skip that point."""
+7. Be VERY DETAILED. List ALL skills, stats, and drops if available. Do not summarize too much.
+8. If a value is missing, just skip that point."""
 
-            res = client.chat.completions.create(
-                # 🔥 PAKAI GPT-OSS DI OPENROUTER
-                model="openai/gpt-oss-20b", 
-                # (Catatan: Kalau ini ternyata berbayar/blokir, lu bisa ganti ke -> "google/gemma-2-9b-it:free")
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Raw Wiki Text:\n{context[:3500]}\n\nFormat this into bullet points."}
-                ],
-                temperature=0.2,
-                extra_headers={
-                    # Ini wajib ditambahin buat OpenRouter biar gak error
-                    "HTTP-Referer": "https://discordbot.com", 
-                    "X-Title": "King Legacy Wiki Bot"
-                }
-            )
-            
-            result = res.choices[0].message.content
-            result = re.sub(r'^[-=_*]{3,}$', '', result, flags=re.MULTILINE)
-            result = re.sub(r'\n{3,}', '\n\n', result)
-            
-            return result.strip()
-            
-        except Exception as e:
-            return f"ERROR_API: {type(e).__name__} - {str(e)[:200]}"
+                res = client.chat.completions.create(
+                    model="openai/gpt-oss-20b", 
+                    # Kalau gpt-oss error, ganti ke: model="google/gemma-2-9b-it:free",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"Raw Wiki Text:\n{context[:3500]}\n\nFormat this into bullet points. Be detailed."}
+                    ],
+                    temperature=0.2,
+                    timeout=30, # Naikkin dikit timeoutnya biar AI sempat nulis panjang
+                    max_tokens=4096, # 🔥 INI RAHASIANYA: Biar AI bisa nulis sampai 4000+ kata (banyak halaman)
+                    extra_headers={
+                        "HTTP-Referer": "https://discordbot.com", 
+                        "X-Title": "King Legacy Wiki Bot"
+                    }
+                )
+                
+                result = res.choices[0].message.content
+                result = re.sub(r'^[-=_*]{3,}$', '', result, flags=re.MULTILINE)
+                result = re.sub(r'\n{3,}', '\n\n', result)
+                return result.strip()
+                
+            except Exception as e:
+                return f"ERROR_API: {type(e).__name__} - {str(e)[:200]}"
+
+        try:
+            return await asyncio.wait_for(asyncio.to_thread(fetch_ai), timeout=35.0)
+        except asyncio.TimeoutError:
+            return "ERROR_API: AI took too long to respond (Timeout)."
 
     def format_raw_text(self, text):
         text = text.replace(' • ', '\n• ')
         text = re.sub(r'([.!?])\s+', r'\1\n', text)
         return text
 
-    def get_image(self, title):
+    async def get_image(self, title):
         try:
-            res = requests.get(API, params={
-                "action": "query",
-                "titles": title,
-                "prop": "pageimages",
-                "format": "json",
-                "pithumbsize": 500
-            }, headers=HEADERS).json()
-
-            for p in res["query"]["pages"].values():
-                if "thumbnail" in p:
-                    return p["thumbnail"]["source"]
+            async with aiohttp.ClientSession() as session:
+                params = {
+                    "action": "query",
+                    "titles": title,
+                    "prop": "pageimages",
+                    "format": "json",
+                    "pithumbsize": 500
+                }
+                async with session.get(API, params=params, headers=HEADERS, timeout=10) as res:
+                    data = await res.json()
+                    for p in data["query"]["pages"].values():
+                        if "thumbnail" in p:
+                            return p["thumbnail"]["source"]
         except:
             pass
         return None
@@ -201,7 +224,7 @@ ABSOLUTE FORMATTING RULES:
     async def question(self, ctx, *, query: str):
         msg = await self.fancy_loading(ctx)
 
-        title = self.search(query)
+        title = await self.search(query)
         
         if not title:
             await msg.edit(embed=discord.Embed(
@@ -211,7 +234,7 @@ ABSOLUTE FORMATTING RULES:
             ))
             return
 
-        data = self.get_data(title)
+        data = await self.get_data(title)
         if not data:
             await msg.edit(embed=discord.Embed(
                 title="❌ Scrape Failed",
@@ -220,7 +243,7 @@ ABSOLUTE FORMATTING RULES:
             ))
             return
 
-        answer = self.ai_answer(question=query, context=data)
+        answer = await self.ai_answer(question=query, context=data)
         
         if answer.startswith("ERROR_ENV") or answer.startswith("ERROR_API"):
             embed = discord.Embed(
@@ -236,29 +259,32 @@ ABSOLUTE FORMATTING RULES:
                 description=raw_text,
                 color=discord.Color.orange()
             )
-            image = self.get_image(title)
+            image = await self.get_image(title)
             if image: raw_embed.set_image(url=image)
             
             await ctx.send(embed=raw_embed)
             return
 
+        # Pecah teks per 1000 karakter buat bikin halaman
         pages = self.chunk_text(answer)
-        image = self.get_image(title)
+        image = await self.get_image(title)
 
         embeds = []
         for i, p in enumerate(pages):
             embed = discord.Embed(
-                title=f"💡 {title}",
+                title=f"💡 {title} (Page {i+1}/{len(pages)})", # 🔥 TAMBAHIN INDIKATOR HALAMAN
                 description=p,
                 color=discord.Color.green()
             )
             embed.set_footer(text=f"Source: King Legacy Wiki")
 
+            # Gamblang cuma muncul di halaman pertama
             if image and i == 0:
                 embed.set_image(url=image)
 
             embeds.append(embed)
 
+        # 🔥 KALO LEBIH DARI 1 HALAMAN, MUNCULIN TOMBOL NEXT
         if len(embeds) > 1:
             view = WikiView(embeds)
             await msg.edit(embed=embeds[0], view=view)
