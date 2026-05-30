@@ -1,6 +1,5 @@
 import discord
 from discord.ext import commands
-from discord import app_commands
 import requests
 from bs4 import BeautifulSoup
 import os
@@ -9,19 +8,19 @@ import difflib
 import random
 from openai import OpenAI
 
+# ================= SETUP AI GRATIS (GROQ) =================
 client = OpenAI(
-    api_key=os.getenv("GROQ_API_KEY"),
+    api_key=os.getenv("GROQ_API_KEY"), # Pastikan lu udah set env variable ini
     base_url="https://api.groq.com/openai/v1"
 )
+# ==========================================================
 
 API = "https://king-legacy-official.fandom.com/api.php"
-
 
 def segmented_bar(percent: int, segments: int = 12):
     filled = int((percent / 100) * segments)
     empty = segments - filled
     return "▰" * filled + "▱" * empty
-
 
 loading_logs = [
     "🔍 Scanning data...",
@@ -36,11 +35,10 @@ loading_logs = [
     "🧬 Finalizing..."
 ]
 
-
 class WikiView(discord.ui.View):
-    def __init__(self, embeds):
+    def __init__(self):
         super().__init__(timeout=180)
-        self.embeds = embeds
+        self.embeds = []
         self.index = 0
 
     @discord.ui.button(label="⬅️", style=discord.ButtonStyle.gray)
@@ -60,10 +58,11 @@ class AI(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    async def fancy_loading(self, interaction, text="Processing..."):
+    # Ganti interaction jadi ctx (context) untuk prefix command
+    async def fancy_loading(self, ctx):
         progress = 0
-        embed = discord.Embed(title="🤖 AI Processing...", description="Starting...", color=discord.Color.orange())
-        msg = await interaction.followup.send(embed=embed)
+        embed = discord.Embed(title="🤖 AI Thinking...", description="Starting...", color=discord.Color.orange())
+        msg = await ctx.send(embed=embed)
 
         for i in range(8):
             progress += random.randint(8, 18)
@@ -97,19 +96,6 @@ class AI(commands.Cog):
         except:
             return None
 
-    def get_suggestions(self, query):
-        try:
-            res = requests.get(API, params={
-                "action": "query",
-                "list": "search",
-                "srsearch": query,
-                "format": "json"
-            }).json()
-            titles = [r["title"] for r in res["query"]["search"]]
-            return difflib.get_close_matches(query, titles, n=3, cutoff=0.3)
-        except:
-            return []
-
     def get_data(self, title):
         try:
             res = requests.get(API, params={
@@ -131,17 +117,32 @@ class AI(commands.Cog):
         except:
             return None
 
-    def ai_format(self, text):
+    def ai_answer(self, question, context):
         try:
-            res = client.responses.create(
-                model="openai/gpt-oss-20b",
-                input=f"Clean and format:\n{text[:4000]}"
-            )
-            return res.output_text
-        except:
-            return text[:4000]
+            system_prompt = """You are a helpful Discord bot expert in the Roblox game 'King Legacy'. 
+The user will ask a question. You will be given context from the King Legacy Wiki.
+Answer the user's question based ONLY on the provided context. 
 
-    # 🔥 IMAGE FUNCTION (DIPAKE LAGI)
+CRITICAL RULES:
+1. NEVER use markdown tables (no | or ---).
+2. NEVER use horizontal rules or long dashes (no --- or *** or ___).
+3. Format key-value pairs or stats like this: **Key:** Value
+4. Use bullet points (•) for lists.
+5. If the context does not contain the answer, say 'I couldn't find that info in the wiki.'
+6. Keep the answer concise and easy to read in Discord."""
+
+            res = client.chat.completions.create(
+                model="llama-3.1-70b-versatile",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Context from Wiki:\n{context[:3000]}\n\nUser's Question: {question}"}
+                ]
+            )
+            return res.choices[0].message.content
+        except Exception as e:
+            print(f"AI Error: {e}")
+            return "Failed to generate answer."
+
     def get_image(self, title):
         try:
             res = requests.get(API, params={
@@ -170,58 +171,83 @@ class AI(commands.Cog):
         chunks.append(text)
         return chunks
 
-    @app_commands.command(name="wiki", description="Search King Legacy Wiki")
-    async def wiki(self, interaction: discord.Interaction, query: str):
-        await interaction.response.defer()
-        msg = await self.fancy_loading(interaction)
+    # 🔥 GANTI JADI PREFIX COMMAND !question
+    @commands.command(name="question", aliases=['q']) # Aliases: bisa pakai !q juga
+    async def question(self, ctx, *, query: str): # Tanda * wajib biar teks kebaca semua
+        msg = await self.fancy_loading(ctx)
 
         title = self.search(query)
+        
         if not title:
-            sug = self.get_suggestions(query)
             await msg.edit(embed=discord.Embed(
                 title="❌ Not Found",
-                description="\n".join(sug) if sug else "No suggestion",
+                description="I couldn't find any relevant wiki page for your question.",
                 color=discord.Color.red()
             ))
             return
 
         data = self.get_data(title)
-        formatted = self.ai_format(data)
-        pages = self.chunk_text(formatted)
+        answer = self.ai_answer(question=query, context=data)
+        pages = self.chunk_text(answer)
 
-        # 🔥 AMBIL IMAGE
         image = self.get_image(title)
 
         embeds = []
         for i, p in enumerate(pages):
             embed = discord.Embed(
-                title=f"{title} ({i+1}/{len(pages)})",
+                title=f"💡 Answering: {query[:50]}",
                 description=p,
                 color=discord.Color.green()
             )
+            embed.set_footer(text=f"Source: {title}")
 
-            # 🔥 SET IMAGE (BALIK LAGI)
-            if image:
+            if image and i == 0:
                 embed.set_image(url=image)
 
             embeds.append(embed)
 
-        await msg.edit(embed=embeds[0], view=WikiView(embeds))
+        # Kasih view kalau halamannya lebih dari 1
+        if len(embeds) > 1:
+            view = WikiView()
+            view.embeds = embeds
+            await msg.edit(embed=embeds[0], view=view)
+        else:
+            await msg.edit(embed=embeds[0])
 
-    @app_commands.command(name="help", description="How to use the bot")
-    async def help(self, interaction: discord.Interaction):
-        await interaction.response.defer()
-        msg = await self.fancy_loading(interaction)
+    # 🔥 GANTI JADI PREFIX COMMAND !help
+    @commands.command(name="help")
+    async def help(self, ctx):
+        msg = await self.fancy_loading(ctx)
 
-        embed = discord.Embed(title="📘 Help", description="How to use /wiki", color=discord.Color.blue())
-        embed.add_field(name="✅ Correct", value="/wiki Dragon Fruit\n/wiki Shark Blade", inline=False)
-        embed.add_field(name="❌ Wrong", value="/wiki dragon\n/wiki fruit", inline=False)
-        embed.add_field(name="💡 Tips", value="Use full names", inline=False)
+        embed = discord.Embed(
+            title="📘 King Legacy AI Bot", 
+            description="This bot uses AI to answer your questions based on the official King Legacy Wiki.", 
+            color=discord.Color.blue()
+        )
+        embed.add_field(
+            name="❓ How to Ask", 
+            value="Use `!question <your question>` or `!q <your question>`\nExample: `!question How to get Dragon Fruit?`", 
+            inline=False
+        )
+        embed.add_field(
+            name="✅ Good Questions", 
+            value="• `!question What is the best sword for PvP?`\n• `!question Where to find Quake fruit?`", 
+            inline=False
+        )
+        embed.add_field(
+            name="❌ Bad Questions", 
+            value="• `!question hi`\n• `!question what is roblox`", 
+            inline=False
+        )
+        embed.add_field(
+            name="💡 Tips", 
+            value="Ask specific things about King Legacy! The AI will read the wiki and summarize the answer for you.", 
+            inline=False
+        )
 
         await msg.edit(embed=embed)
 
 
-# 🔥 CORE AI FUNCTION (ASYNC)
 async def get_item_info(name: str):
     loop = asyncio.get_event_loop()
 
@@ -272,4 +298,6 @@ async def get_item_info(name: str):
 
 
 async def setup(bot):
+    # Matiin default help biar gak konflik sama !help kita
+    bot.remove_command("help")
     await bot.add_cog(AI(bot))
