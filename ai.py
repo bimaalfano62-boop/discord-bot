@@ -43,19 +43,26 @@ class AI(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # 🔥 SMART SEARCH: Clean query so Fandom doesn't get confused
+    # 🔥 SMART SEARCH: Clean query from conversational fluff
     async def search(self, query):
         query_lower = query.lower()
-        search_query = query
         
-        # Remove specific mechanic words so Fandom searches for the ITEM, not the mechanic
-        words_to_clean = ["m1", "m2", "damage", "combo", "hit", "scaling", "how much", "dps"]
+        # 1. Remove useless conversational words so Fandom focuses on the Nouns (Items)
+        filler_words = [
+            "which one is better", "which is better", "what is better", 
+            "should i buy", "should i get", "for pvp", "for pve", "for grinding",
+            "compared to", "vs", " or ", " and ", "the best", "better",
+            "damage", "m1", "scaling", "dps", "how much"
+        ]
         clean_query = query
-        for word in words_to_clean:
-            clean_query = re.sub(rf'\b{word}\b', '', clean_query, flags=re.IGNORECASE)
-        clean_query = clean_query.strip()
+        for word in filler_words:
+            clean_query = re.sub(re.escape(word), ' ', clean_query, flags=re.IGNORECASE)
+        
+        # Clean up double spaces
+        clean_query = re.sub(r'\s+', ' ', clean_query).strip()
 
-        # Smart mapping based on context
+        # 2. Smart mapping based on context
+        search_query = clean_query
         if any(word in query_lower for word in ["gamepass", "robux", "buy", "pass", "spend"]):
             search_query = "Gamepasses King Legacy"
         elif any(word in query_lower for word in ["crew", "guild", "team", "create crew"]):
@@ -64,12 +71,11 @@ class AI(commands.Cog):
             search_query = f"{clean_query} Swords King Legacy"
         elif any(word in query_lower for word in ["accessories", "accessory"]):
             search_query = f"{clean_query} Accessories King Legacy"
-        elif any(word in query_lower for word in ["race", "awakening", "skill"]):
+        elif any(word in query_lower for word in ["race", "awakening"]):
             search_query = f"{clean_query} Races King Legacy"
         elif any(word in query_lower for word in ["boss", "spawn", "drop"]):
             search_query = f"{clean_query} Bosses King Legacy"
         else:
-            # Default: Use cleaned query + skills/stats to find the exact fruit/item page
             search_query = f"{clean_query} skills stats King Legacy"
 
         try:
@@ -83,7 +89,8 @@ class AI(commands.Cog):
                 async with session.get(API, params=params, headers=HEADERS, timeout=10) as res:
                     data = await res.json()
                     results = data["query"]["search"]
-                    return [r["title"] for r in results[:3]] if results else []
+                    # Take top 5 results to make sure we catch both items in a comparison
+                    return [r["title"] for r in results[:5]] if results else []
         except:
             return []
 
@@ -113,7 +120,7 @@ class AI(commands.Cog):
                             if text:
                                 all_text += f"\n\n=== WIKI PAGE: {title} ===\n{text.strip()}"
                             
-                            if len(all_text) > 4000:
+                            if len(all_text) > 4500: # Increased slightly for comparisons
                                 break
         except:
             pass
@@ -126,16 +133,16 @@ class AI(commands.Cog):
 
         def fetch_ai():
             try:
-                # 🔥 PROMPT: OPINIONATED & ANALYTICAL EXPERT
+                # 🔥 PROMPT: OPINIONATED, ANALYTICAL, & CAN COMPARE
                 system_prompt = """You are a highly analytical, pro-player Discord bot expert in the Roblox game 'King Legacy'.
 
 HOW TO ANSWER:
 1. You will be given Wiki Data. Read it carefully.
-2. If the user asks about specific stats, damage (like M1 damage), or moves: Extract the exact numbers/facts from the Wiki Data, then PROVIDE YOUR OPINION AND ANALYSIS. Is the damage good for its rarity? Is it viable for PvP/PvE? Is the move slow or fast? Give your take as an expert.
-3. If the user asks for recommendations, compare the items in the Wiki Data and recommend the best one based on their needs/budget, explaining WHY.
-4. If the user asks "how to" do something, piece together the steps from the Wiki Data.
-5. DO NOT just say "I couldn't find info" if the Wiki Data contains the relevant item page. Use logic to find the answer based on the data provided.
-6. DO NOT mix up King Legacy with Blox Fruits or other games. King Legacy does NOT have V4 race awakenings.
+2. **COMPARISONS:** If the user asks to compare items (e.g., "Noirceur vs Night Blade", "which is better for PvP"), find BOTH items in the Wiki Data. Compare their stats, skills, and usability. Give a clear opinion on which one wins and WHY based on the data.
+3. **MECHANICS:** If the user asks about specific stats/damage (like M1 damage), extract the numbers from the Wiki Data and give your analysis. Is it good? Is it slow?
+4. **RECOMMENDATIONS:** If the user asks what to buy, look at the prices and stats, and recommend the best value.
+5. DO NOT just say "I couldn't find info" if the Wiki Data contains the relevant item pages. Read the pages and use logic to find the answer.
+6. DO NOT mix up King Legacy with Blox Fruits or other games.
 7. ONLY say "I couldn't find info" if the Wiki Data is completely empty or has zero connection to the question.
 
 FORMATTING RULES:
@@ -147,7 +154,7 @@ FORMATTING RULES:
 
                 user_content = f"User's Question: {question}"
                 if context:
-                    user_content = f"Wiki Data:\n{context[:4000]}\n\n{user_content}"
+                    user_content = f"Wiki Data:\n{context[:4500]}\n\n{user_content}"
                 else:
                     user_content += "\n\n(Wiki Data: No relevant data found)"
 
@@ -158,7 +165,7 @@ FORMATTING RULES:
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_content}
                     ],
-                    temperature=0.6, # Higher temperature for better opinions/analysis
+                    temperature=0.6, 
                     timeout=30, 
                     max_tokens=4096,
                     extra_headers={
@@ -268,8 +275,8 @@ FORMATTING RULES:
             description="This bot uses AI to answer your questions based on the official King Legacy Wiki.", 
             color=discord.Color.blue()
         )
-        embed.add_field(name="❓ How to Ask", value="Use `/question <your question>`\nExample: `/question How to get Dragon Fruit?`", inline=False)
-        embed.add_field(name="✅ Good Questions", value="• `/question M1 Tree Fruit damage?`\n• `/question What gamepass should I buy with 10k robux?`", inline=False)
+        embed.add_field(name="❓ How to Ask", value="Use `/question <your question>`\nExample: `/question Noirceur vs Night Blade for PvP?`", inline=False)
+        embed.add_field(name="✅ Good Questions", value="• `/question M1 Tree Fruit damage?`\n• `/question What gamepass should I buy?`", inline=False)
         embed.add_field(name="❌ Bad Questions", value="• `/question hi`\n• `/question what is roblox`", inline=False)
         
         await interaction.response.send_message(embed=embed)
