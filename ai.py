@@ -140,8 +140,8 @@ ABSOLUTE FORMATTING RULES:
 7. If a value is missing, just skip that point."""
 
             res = client.chat.completions.create(
-                # 🔥 FIXED: PAKAI MODEL TERBARU YANG MASIH AKTIF DI GROQ
-                model="llama3-groq-70b-8192", 
+                # 🔥 FIXED: PAKAI GEMMA 2 (PALING STABIL, GRATIS, DIJAMIN GAK ERROR 403/404)
+                model="gemma2-9b-it", 
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Raw Wiki Text:\n{context[:3500]}\n\nFormat this into bullet points."}
@@ -295,3 +295,4 @@ ABSOLUTE FORMATTING RULES:
 async def setup(bot):
     bot.remove_command("help")
     await bot.add_cog(AI(bot))
+    
