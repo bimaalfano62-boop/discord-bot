@@ -16,15 +16,11 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
-
-    # Fix StockView persistent (tidak perlu parameter bot lagi)
     try:
         bot.add_view(StockView())
         print("✅ StockView registered")
     except Exception as e:
         print(f"StockView error: {e}")
-
-    # Sync slash commands
     try:
         synced = await bot.tree.sync()
         print(f"✅ Synced {len(synced)} slash commands")
