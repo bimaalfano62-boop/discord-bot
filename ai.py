@@ -116,36 +116,37 @@ class AI(commands.Cog):
         except:
             return None
 
-    # 🔥 FIXED: AI YANG NGASIH TAU ERROR LANGSUNG DI DISCORD
+    # 🔥 FIXED: AI PROMPT SUPER KETAT BUAT BIKIN BULLET POINT
     def ai_answer(self, question, context):
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
             return "ERROR_ENV: GROQ_API_KEY belum di-set di file .env lu!"
 
         try:
-            system_prompt = """You are a chill, helpful Discord bot who is an expert in the Roblox game 'King Legacy'. 
+            system_prompt = """You are a Discord bot that formats game wiki data into a clean info card.
 
-Your job:
-1. Read the raw text from the King Legacy Wiki (it might be messy and squished together in one line).
-2. Answer the user's question based on that text.
+INPUT: You will receive messy raw text from the King Legacy Wiki.
+TASK: Extract the important stats/info and format it perfectly for Discord.
 
-STYLE RULES:
-- Talk like a friendly gamer, NOT a robot.
-- Keep it conversational and easy to read.
-- Extract key info and format it cleanly. Example: **Rarity:** Mythical | **Price:** 399 Robux.
-- NEVER use markdown tables (no | or ---).
-- NEVER use horizontal rules (no --- or *** or ___).
-- Use bullet points (•) or emojis if it helps readability.
-- If the text doesn't contain the answer, just say "Couldn't find that in the wiki bro 🤷"
-- Do NOT repeat the same info."""
+ABSOLUTE FORMATTING RULES:
+1. You MUST use bullet points for EVERY piece of information.
+2. Format: • **Category:** Value (Example: • **Rarity:** Legendary)
+3. For skills or lists, use indented sub-bullets:
+   • **Skills:**
+     - [Z] Skill Name: Description
+     - [X] Skill Name: Description
+4. NEVER use markdown tables (| or ---).
+5. NEVER use horizontal rules (--- or ***).
+6. NEVER write long paragraphs. Keep it strictly point-by-point.
+7. If a value is missing, just skip that point."""
 
             res = client.chat.completions.create(
-                model="llama3-8b-8192", # Model paling stabil di Groq
+                model="llama-3.1-8b-instant",
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Raw Wiki Text:\n{context[:3500]}\n\nUser's Question: {question}"}
+                    {"role": "user", "content": f"Raw Wiki Text:\n{context[:3500]}\n\nFormat this into bullet points."}
                 ],
-                temperature=0.6 
+                temperature=0.2 # Diturunin biar dia cuma ngikutin format, gak kreatif-kreatif banget
             )
             
             result = res.choices[0].message.content
@@ -155,8 +156,15 @@ STYLE RULES:
             return result.strip()
             
         except Exception as e:
-            # Langsung return errornya biar muncul di Discord
             return f"ERROR_API: {type(e).__name__} - {str(e)[:200]}"
+
+    # 🔥 AUTO FORMATTER BUAT CADANGAN KALO AI MATI
+    def format_raw_text(self, text):
+        # Kalau AI gagal, Python sendiri yang paksa bikin format per baris
+        # Misal teks: "Rarity Legendary Type Natural" -> dipecah per kata besar
+        text = text.replace(' • ', '\n• ')
+        text = re.sub(r'([.!?])\s+', r'\1\n', text) # Pindah baris setelah titik
+        return text
 
     def get_image(self, title):
         try:
@@ -211,19 +219,19 @@ STYLE RULES:
 
         answer = self.ai_answer(question=query, context=data)
         
-        # 🔥 CEK KALO AI ERROR
+        # CEK KALO AI ERROR
         if answer.startswith("ERROR_ENV") or answer.startswith("ERROR_API"):
             embed = discord.Embed(
                 title="❌ AI System Error",
-                description=f"```{answer}```\n\n**Falling back to raw wiki...**",
+                description=f"```{answer}```\n\n**Using auto-formatter...**",
                 color=discord.Color.red()
             )
             await msg.edit(embed=embed)
             
-            # Kirim raw wiki sebagai fallback
-            raw_text = data[:1500]
+            # Pakai auto-formatter Python kalau AI mati
+            raw_text = self.format_raw_text(data[:1500])
             raw_embed = discord.Embed(
-                title=f"📄 Raw: {title}",
+                title=f"📄 {title}",
                 description=raw_text,
                 color=discord.Color.orange()
             )
@@ -240,11 +248,11 @@ STYLE RULES:
         embeds = []
         for i, p in enumerate(pages):
             embed = discord.Embed(
-                title=f"💡 {query[:50]}",
+                title=f"💡 {title}", # Pake judul wiki biar jelas
                 description=p,
                 color=discord.Color.green()
             )
-            embed.set_footer(text=f"Source: {title}")
+            embed.set_footer(text=f"Source: King Legacy Wiki")
 
             if image and i == 0:
                 embed.set_image(url=image)
