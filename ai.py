@@ -94,6 +94,7 @@ class AI(commands.Cog):
         except:
             return None
 
+    # 🔥 FIXED: SCRAPER YANG GAK NGHAPUS INFOBOX
     def get_data(self, title):
         try:
             res = requests.get(API, params={
@@ -105,22 +106,27 @@ class AI(commands.Cog):
 
             soup = BeautifulSoup(res["parse"]["text"]["*"], "lxml")
 
-            # Hapus element sampah doang, jangan terlalu agresif ngefilter teks
-            for tag in soup.find_all(['table', 'aside', 'script', 'style', 'nav']):
+            # Hapus elemen yang bener-bener gak berguna (navigasi, script, dll)
+            for tag in soup.find_all(['script', 'style', 'nav']):
+                tag.decompose()
+            
+            # Hapus Table of Contents biar gak ngulang judul
+            for tag in soup.find_all('div', class_='toc'):
                 tag.decompose()
 
-            text = ""
-            for tag in soup.find_all(["p", "li"]):
-                t = tag.get_text(" ", strip=True)
-                if t:
-                    text += t + "\n"
+            # GANTI SEMUA BR DAN TR JADI SPASI supaya teks nyambung, bukan pecah-pecah ke bawah
+            for tag in soup.find_all(['br', 'tr']):
+                tag.replace_with(' ')
+
+            # Ambil semua teks, gabung jadi satu paragraf panjang pakai spasi
+            text = soup.get_text(separator=' ', strip=True)
 
             # Bersihin spasi ganda
-            text = re.sub(r'\n{3,}', '\n\n', text)
-            text = re.sub(r' +', ' ', text)
+            text = re.sub(r'\s+', ' ', text)
 
             return text.strip() if text else None
-        except:
+        except Exception as e:
+            print(f"❌ Scrape Error: {e}")
             return None
 
     # 🔥 FIXED: AI YANG SANTAI & NGALIR
@@ -134,13 +140,13 @@ class AI(commands.Cog):
             system_prompt = """You are a chill, helpful Discord bot who is an expert in the Roblox game 'King Legacy'. 
 
 Your job:
-1. Read the messy raw wiki text provided.
+1. Read the raw text from the King Legacy Wiki (it might be messy and squished together in one line).
 2. Answer the user's question based on that text.
 
 STYLE RULES:
-- Talk like a friendly gamer, NOT a robot or Wikipedia article.
-- Keep it conversational, relaxed, and easy to read.
-- Combine messy stats into clean formats (e.g., **Rarity:** Mythical | **Price:** 399 Robux).
+- Talk like a friendly gamer, NOT a robot.
+- Keep it conversational and easy to read.
+- Extract key info and format it cleanly. Example: **Rarity:** Mythical | **Price:** 399 Robux.
 - NEVER use markdown tables (no | or ---).
 - NEVER use horizontal rules (no --- or *** or ___).
 - Use bullet points (•) or emojis if it helps readability.
@@ -148,12 +154,12 @@ STYLE RULES:
 - Do NOT repeat the same info."""
 
             res = client.chat.completions.create(
-                model="llama-3.1-8b-instant", # Kembali ke 8b biar super kenceng & jarang timeout
+                model="llama-3.1-8b-instant", # Super kenceng
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Raw Wiki Text:\n{context[:3500]}\n\nUser's Question: {question}"}
                 ],
-                temperature=0.6 # Naikin dikiti biar gaya bahasanya lebih natural/santai
+                temperature=0.6 
             )
             
             result = res.choices[0].message.content
@@ -281,3 +287,4 @@ STYLE RULES:
 async def setup(bot):
     bot.remove_command("help")
     await bot.add_cog(AI(bot))
+    
