@@ -47,10 +47,10 @@ FRUIT_DATA = {
     "gravity":  {"rarity": "Rare", "emoji": "<:gravity:1509933161771962571>", "price": 2_800_000},
     "rubber":   {"rarity": "Rare", "emoji": "<:rubber:1509932936978235512>",  "price": 6_250_000},
     "mammoth":  {"rarity": "Rare", "emoji": "<:mammoth:1509933080100475101>", "price": 3_700_000},
-    "allo":     {"rarity": "Rare", "emoji": "🦖",                             "price": 2_800_000},
-    "brachio":  {"rarity": "Rare", "emoji": "🦕",                             "price": 3_000_000},
-    "spino":    {"rarity": "Rare", "emoji": "🦎",                             "price": 6_000_000},
-    "palm":     {"rarity": "Rare", "emoji": "🌴",                             "price": 1_500_000},
+    "allo":     {"rarity": "Rare", "emoji": "<:allo:1509940707908124905>",                             "price": 2_800_000},
+    "brachio":  {"rarity": "Rare", "emoji": "<:brachio:1509940751788937426>",                             "price": 3_000_000},
+    "spino":    {"rarity": "Rare", "emoji": "<:spino:1509940730846773298>",                             "price": 6_000_000},
+    "paw":     {"rarity": "Rare", "emoji": "<:paw:1509929487381299251>",                             "price": 1_500_000},
 
     # ── Uncommon ──────────────────────────────────────────
     "shadow":      {"rarity": "Uncommon", "emoji": "<:shadow:1509929594969395303>", "price": 4_100_000},
@@ -58,7 +58,7 @@ FRUIT_DATA = {
     "wolf":        {"rarity": "Uncommon", "emoji": "<:wolf:1509929559678783638>",   "price": 700_000},
     "barrier":     {"rarity": "Uncommon", "emoji": "<:barrier:1509929468364329061>","price": 1_350_000},
     "string":      {"rarity": "Uncommon", "emoji": "<:string:1509929524689768599>", "price": 5_100_000},
-    "telekinesis": {"rarity": "Uncommon", "emoji": "🔮",                            "price": 2_750_000},
+    "telekinesis": {"rarity": "Uncommon", "emoji": "<:telekinesis:1509945137185161236>",                            "price": 2_750_000},
     "sand":        {"rarity": "Uncommon", "emoji": "<:sand:1509932967278153752>",   "price": 1_500_000},
 
     # ── Common ────────────────────────────────────────────
@@ -80,12 +80,12 @@ RARITY_COLORS = {
 }
 
 RARITY_EMOJI = {
-    "Mythical":  "🔴",
-    "Legendary": "🟡",
-    "Epic":      "🟣",
-    "Rare":      "🔵",
-    "Uncommon":  "🟢",
-    "Common":    "⚪",
+    "Mythical":  "<:mhytical:1510071574982561933>",
+    "Legendary": "<:legendary:1510071553491075203>",
+    "Epic":      "<:epic:1510071538383061153>",
+    "Rare":      "<:rare:1510071597002653877>",
+    "Uncommon":  "<:uncummon:1510071612114993202>",
+    "Common":    "<:common:1510071627637854368>",
 }
 
 # =========================
