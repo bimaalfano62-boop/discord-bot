@@ -17,6 +17,11 @@ client = OpenAI(
 
 API = "https://king-legacy-official.fandom.com/api.php"
 
+# Wajib pakai headers biar Fandom gak nge-block bot
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
+}
+
 def segmented_bar(percent: int, segments: int = 12):
     filled = int((percent / 100) * segments)
     empty = segments - filled
@@ -88,13 +93,17 @@ class AI(commands.Cog):
                 "list": "search",
                 "srsearch": query,
                 "format": "json"
-            }).json()
+            }, headers=HEADERS).json()
             results = res["query"]["search"]
-            return results[0]["title"] if results else None
-        except:
+            if results:
+                print(f"🔎 Found title: {results[0]['title']}")
+                return results[0]["title"]
+            return None
+        except Exception as e:
+            print(f"❌ Search Error: {e}")
             return None
 
-    # 🔥 FIXED: SCRAPER YANG GAK NGHAPUS INFOBOX
+    # 🔥 FIXED: SCRAPER YANG LEBIH AMAN + DEBUG
     def get_data(self, title):
         try:
             res = requests.get(API, params={
@@ -102,34 +111,34 @@ class AI(commands.Cog):
                 "page": title,
                 "prop": "text",
                 "format": "json"
-            }).json()
+            }, headers=HEADERS).json()
 
-            soup = BeautifulSoup(res["parse"]["text"]["*"], "lxml")
+            # Cek kalau Fandom nolak / error
+            if "parse" not in res or "text" not in res["parse"]:
+                print(f"❌ Fandom API Error: {res}")
+                return None
 
-            # Hapus elemen yang bener-bener gak berguna (navigasi, script, dll)
-            for tag in soup.find_all(['script', 'style', 'nav']):
-                tag.decompose()
-            
-            # Hapus Table of Contents biar gak ngulang judul
-            for tag in soup.find_all('div', class_='toc'):
-                tag.decompose()
+            html = res["parse"]["text"]["*"]
+            # Ganti lxml jadi html.parser biar lebih stabil
+            soup = BeautifulSoup(html, "html.parser")
 
-            # GANTI SEMUA BR DAN TR JADI SPASI supaya teks nyambung, bukan pecah-pecah ke bawah
-            for tag in soup.find_all(['br', 'tr']):
-                tag.replace_with(' ')
-
-            # Ambil semua teks, gabung jadi satu paragraf panjang pakai spasi
+            # Ambil semua teks, gabung pake spasi
             text = soup.get_text(separator=' ', strip=True)
-
+            
             # Bersihin spasi ganda
             text = re.sub(r'\s+', ' ', text)
 
-            return text.strip() if text else None
+            if text:
+                print(f"✅ Scrape success! Length: {len(text)} characters.")
+                return text
+            else:
+                print("⚠️ Scrape result is empty!")
+                return None
+                
         except Exception as e:
-            print(f"❌ Scrape Error: {e}")
+            print(f"❌ Scrape Exception: {e}")
             return None
 
-    # 🔥 FIXED: AI YANG SANTAI & NGALIR
     def ai_answer(self, question, context):
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
@@ -154,7 +163,7 @@ STYLE RULES:
 - Do NOT repeat the same info."""
 
             res = client.chat.completions.create(
-                model="llama-3.1-8b-instant", # Super kenceng
+                model="llama-3.1-8b-instant",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Raw Wiki Text:\n{context[:3500]}\n\nUser's Question: {question}"}
@@ -182,7 +191,7 @@ STYLE RULES:
                 "prop": "pageimages",
                 "format": "json",
                 "pithumbsize": 500
-            }).json()
+            }, headers=HEADERS).json()
 
             for p in res["query"]["pages"].values():
                 if "thumbnail" in p:
@@ -221,14 +230,16 @@ STYLE RULES:
         
         if answer is None:
             print("⚠️ AI Failed, using raw wiki fallback...")
-            answer = data[:1500] if data else "No data found."
+            # Fallback dipercantik
+            fallback_text = data[:1500] if data else "Couldn't read the wiki page. It might be empty or blocked."
             source_text = "⚠️ AI failed, showing raw wiki data"
             embed_color = discord.Color.orange()
         else:
+            fallback_text = answer
             source_text = f"Source: {title}"
             embed_color = discord.Color.green()
 
-        pages = self.chunk_text(answer)
+        pages = self.chunk_text(fallback_text)
         image = self.get_image(title)
 
         embeds = []
@@ -287,4 +298,3 @@ STYLE RULES:
 async def setup(bot):
     bot.remove_command("help")
     await bot.add_cog(AI(bot))
-    
