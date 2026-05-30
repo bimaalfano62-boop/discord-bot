@@ -84,6 +84,7 @@ class AI(commands.Cog):
 
         return msg
 
+    # 🔥 IMPROVE: NYARI BEBERAPA HALAMAN SEKALIGUS
     async def search(self, query):
         try:
             async with aiohttp.ClientSession() as session:
@@ -96,32 +97,40 @@ class AI(commands.Cog):
                 async with session.get(API, params=params, headers=HEADERS, timeout=10) as res:
                     data = await res.json()
                     results = data["query"]["search"]
-                    return results[0]["title"] if results else None
+                    # Ambil top 3 judul biar konteksnya lengkap
+                    return [r["title"] for r in results[:3]] if results else []
         except:
-            return None
+            return []
 
-    async def get_data(self, title):
+    # 🔥 IMPROVE: GABUNGIN TEKS DARI BEBERAPA HALAMAN
+    async def get_data(self, titles):
+        all_text = ""
         try:
             async with aiohttp.ClientSession() as session:
-                params = {
-                    "action": "parse",
-                    "page": title,
-                    "prop": "text",
-                    "format": "json"
-                }
-                async with session.get(API, params=params, headers=HEADERS, timeout=10) as res:
-                    data = await res.json()
+                for title in titles:
+                    params = {
+                        "action": "parse",
+                        "page": title,
+                        "prop": "text",
+                        "format": "json"
+                    }
+                    async with session.get(API, params=params, headers=HEADERS, timeout=10) as res:
+                        data = await res.json()
 
-                    if "parse" not in data or "text" not in data["parse"]:
-                        return None
-
-                    html = data["parse"]["text"]["*"]
-                    soup = BeautifulSoup(html, "html.parser")
-                    text = soup.get_text(separator=' ', strip=True)
-                    text = re.sub(r'\s+', ' ', text)
-                    return text.strip() if text else None
+                        if "parse" in data and "text" in data["parse"]:
+                            html = data["parse"]["text"]["*"]
+                            soup = BeautifulSoup(html, "html.parser")
+                            text = soup.get_text(separator=' ', strip=True)
+                            text = re.sub(r'\s+', ' ', text)
+                            if text:
+                                all_text += f"\n\n--- Data from page: {title} ---\n{text.strip()}"
+                            
+                            # Batasin total teks biar gak kepanjangan (max 3500 karakter)
+                            if len(all_text) > 3500:
+                                break
         except:
-            return None
+            pass
+        return all_text.strip() if all_text else None
 
     async def ai_answer(self, question, context):
         api_key = os.getenv("OPENROUTER_API_KEY")
@@ -130,18 +139,19 @@ class AI(commands.Cog):
 
         def fetch_ai():
             try:
-                # 🔥 PROMPT ANTI-HALUSINASI SADIS
+                # 🔥 PROMPT TANPA REGIONAL PRICING, FOKUS KATEGORI
                 system_prompt = """You are a Discord bot who ONLY knows about the Roblox game 'King Legacy'.
 
 CRITICAL ANTI-HALLUCINATION RULES:
 1. Your knowledge MUST 100% come from the provided Wiki Data. 
-2. DO NOT mix up King Legacy with Blox Fruits or any other game. They are different games!
-3. If the Wiki Data does not mention a specific item, price, or feature (e.g., there is no '2x Money' gamepass in King Legacy, only '2x Boss Drop'), DO NOT invent it. ONLY state what is explicitly written in the text.
-4. If you are unsure, or the text doesn't have the answer, say: "The wiki doesn't mention this, so I'm not sure." NEVER guess.
-5. If the user asks for recommendations, give advice BASED ONLY on the items explicitly listed in the Wiki Data.
+2. DO NOT mix up King Legacy with Blox Fruits or any other game.
+3. If the Wiki Data does not mention a specific item, DO NOT invent it. ONLY state what is explicitly written.
+4. If the user asks for categories (e.g., "easy mythical swords", "best accessories"), LOOK through all the provided Wiki Data pages, find the items that match the category, and list them.
+5. If the user asks for recommendations, give advice BASED ONLY on the stats/difficulty explicitly written in the Wiki Data.
+6. If you are unsure, or the text doesn't have the answer, say: "The wiki doesn't mention this, so I'm not sure." NEVER guess.
 
 FORMATTING RULES:
-1. Be conversational and chill. Like a friendly gamer.
+1. Be conversational, helpful, and chill.
 2. Use bullet points for stats or lists: • **Category:** Value
 3. NEVER use markdown tables (| or ---).
 4. NEVER use horizontal rules (--- or *** or ___).
@@ -149,7 +159,7 @@ FORMATTING RULES:
 
                 user_content = f"User's Question: {question}"
                 if context:
-                    user_content = f"Wiki Data:\n{context[:3000]}\n\n{user_content}"
+                    user_content = f"Wiki Data:\n{context[:3500]}\n\n{user_content}"
                 else:
                     user_content += "\n\n(Wiki Data: No relevant data found)"
 
@@ -160,7 +170,7 @@ FORMATTING RULES:
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_content}
                     ],
-                    temperature=0.1, # 🔥 TURUNIN KREATIVITAS KE PALING RENDAH BIAR DIA GAK NGARANG
+                    temperature=0.1, 
                     timeout=30, 
                     max_tokens=4096,
                     extra_headers={
@@ -224,11 +234,13 @@ FORMATTING RULES:
     async def question(self, ctx, *, query: str):
         msg = await self.fancy_loading(ctx)
 
-        title = await self.search(query)
+        titles = await self.search(query)
         data = None
+        main_title = None
         
-        if title:
-            data = await self.get_data(title)
+        if titles:
+            main_title = titles[0] # Ambil judul pertama buat gambar
+            data = await self.get_data(titles) # Gabungin teks dari semua judul
         
         answer = await self.ai_answer(question=query, context=data)
         
@@ -242,7 +254,7 @@ FORMATTING RULES:
             return
 
         pages = self.chunk_text(answer)
-        image = await self.get_image(title) if title else None
+        image = await self.get_image(main_title) if main_title else None
 
         embeds = []
         for i, p in enumerate(pages):
@@ -252,8 +264,8 @@ FORMATTING RULES:
                 color=discord.Color.green()
             )
             
-            if title:
-                embed.set_footer(text=f"Source: {title}")
+            if main_title:
+                embed.set_footer(text=f"Source: {', '.join(titles)}")
             else:
                 embed.set_footer(text="No exact wiki match found")
 
@@ -284,7 +296,7 @@ FORMATTING RULES:
         )
         embed.add_field(
             name="✅ Good Questions", 
-            value="• `!question What is the best sword for PvP?`\n• `!question I have 1k robux, what should I buy?`", 
+            value="• `!question What is the best sword for PvP?`\n• `!question Easy mythical swords to craft`", 
             inline=False
         )
         embed.add_field(
@@ -304,4 +316,3 @@ FORMATTING RULES:
 async def setup(bot):
     bot.remove_command("help")
     await bot.add_cog(AI(bot))
-    
