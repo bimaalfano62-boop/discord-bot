@@ -4,13 +4,13 @@ import requests
 from bs4 import BeautifulSoup
 import os
 import asyncio
-import difflib
 import random
+import re
 from openai import OpenAI
 
 # ================= SETUP AI GRATIS (GROQ) =================
 client = OpenAI(
-    api_key=os.getenv("GROQ_API_KEY"), # PASTIIN INI UDAH DI SET DI FILE .env
+    api_key=os.getenv("GROQ_API_KEY"),
     base_url="https://api.groq.com/openai/v1"
 )
 # ==========================================================
@@ -70,7 +70,6 @@ class AI(commands.Cog):
 
             bar = segmented_bar(progress)
             log = random.choice(loading_logs)
-
             stage = "🔹 Initializing" if progress < 30 else "🔸 Processing" if progress < 70 else "🔶 Finalizing"
 
             embed.description = f"`{bar}` {progress}%\n\n📌 {log}\n🧭 Stage: {stage}"
@@ -104,53 +103,71 @@ class AI(commands.Cog):
                 "format": "json"
             }).json()
 
-            soup = BeautifulSoup(res["parse"]["text"]["*"], "html.parser")
+            # Pakai lxml parser biar lebih bersih
+            soup = BeautifulSoup(res["parse"]["text"]["*"], "lxml")
+
+            # HAPUS SEMUA TABEL & ELEMENT YANG BIKIN BERANTAKAN
+            for tag in soup.find_all(['table', 'aside', 'script', 'style', 'nav']):
+                tag.decompose()
 
             text = ""
-            for tag in soup.find_all(["p", "li", "td", "th"]):
-                t = tag.get_text("\n", strip=True)
-                if t:
+            for tag in soup.find_all(["p", "li"]):
+                t = tag.get_text(" ", strip=True)
+                if t and len(t) > 15:  # Skip baris yang terlalu pendek (kayak "399", "Bundle", dll)
                     text += t + "\n"
 
-            return text
+            # Bersihin spasi ganda & enter berlebih
+            text = re.sub(r'\n{3,}', '\n\n', text)
+            text = re.sub(r' +', ' ', text)
+
+            return text.strip() if text else None
         except:
             return None
 
-    # 🔥 FIXED: AI ANSWER DENGAN ERROR LOG JELAS + FALLBACK
+    # 🔥 FIXED: AI ANSWER DENGAN PROMPT SUPER KETAT
     def ai_answer(self, question, context):
-        # Cek dulu apakah API key ada
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
             print("❌ ERROR: GROQ_API_KEY belum di-set di file .env!")
             return None
 
         try:
-            system_prompt = """You are a helpful Discord bot expert in the Roblox game 'King Legacy'. 
-The user will ask a question. You will be given context from the King Legacy Wiki.
-Answer the user's question based ONLY on the provided context. 
+            system_prompt = """You are a Discord bot that answers questions about the Roblox game 'King Legacy'.
 
-CRITICAL RULES:
-1. NEVER use markdown tables (no | or ---).
-2. NEVER use horizontal rules or long dashes (no --- or *** or ___).
-3. Format key-value pairs or stats like this: **Key:** Value
-4. Use bullet points (•) for lists.
-5. If the context does not contain the answer, say 'I couldn't find that info in the wiki.'
-6. Keep the answer concise and easy to read in Discord."""
+INPUT: You will receive messy/ugly raw text scraped from the King Legacy Wiki.
+TASK: Extract the relevant info to answer the user's question, then format it beautifully for Discord.
+
+ABSOLUTE RULES (READ CAREFULLY):
+1. Output ONLY Discord-friendly markdown.
+2. NEVER output raw CSV, raw table data, or separated words like "Bundle" "Price" "399" on different lines.
+3. Combine stats into clean key-value pairs: **Rarity:** Mythical | **Price:** 399 Robux
+4. NEVER use markdown tables (no | or ---).
+5. NEVER use horizontal rules (no --- or *** or ___).
+6. Use bullet points (•) for lists.
+7. If the text is too messy, summarize ONLY the important points.
+8. Do NOT repeat the same info twice.
+9. Keep it SHORT and CLEAN."""
 
             res = client.chat.completions.create(
-                model="llama-3.1-8b-instant", # Model paling kenceng & stabil di Groq
+                model="llama-3.1-70b-versatile", # Pakai 70b biar otaknya kuat bersihin data sampah
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Context from Wiki:\n{context[:3000]}\n\nUser's Question: {question}"}
+                    {"role": "user", "content": f"Raw Wiki Text:\n{context[:3500]}\n\nUser's Question: {question}"}
                 ],
-                temperature=0.3 # Biar jawabannya akurat
+                temperature=0.2 # Rendahin kreativitas biar fokus ngerapihin
             )
-            return res.choices[0].message.content
+            
+            result = res.choices[0].message.content
+            
+            # Post-cleaning: Kalau AI masih bandel nge-spam garis
+            result = re.sub(r'^[-=_*]{3,}$', '', result, flags=re.MULTILINE)
+            result = re.sub(r'\n{3,}', '\n\n', result)
+            
+            return result.strip()
             
         except Exception as e:
-            # Print error sebenarnya di console biar lu tau kenapa gagal
             print(f"❌ AI ERROR DETAIL: {type(e).__name__}: {e}")
-            return None # Return None biar trigger fallback
+            return None
 
     def get_image(self, title):
         try:
@@ -180,7 +197,6 @@ CRITICAL RULES:
         chunks.append(text)
         return chunks
 
-    # 🔥 PREFIX COMMAND !question
     @commands.command(name="question", aliases=['q'])
     async def question(self, ctx, *, query: str):
         msg = await self.fancy_loading(ctx)
@@ -196,11 +212,8 @@ CRITICAL RULES:
             return
 
         data = self.get_data(title)
-        
-        # Coba pakai AI dulu
         answer = self.ai_answer(question=query, context=data)
         
-        # FALLBACK: Kalau AI gagal/error, pakai teks wiki mentah tapi dipotong
         if answer is None:
             print("⚠️ AI Failed, using raw wiki fallback...")
             answer = data[:1500] if data else "No data found."
@@ -216,7 +229,7 @@ CRITICAL RULES:
         embeds = []
         for i, p in enumerate(pages):
             embed = discord.Embed(
-                title=f"💡 Answering: {query[:50]}",
+                title=f"💡 {query[:50]}",
                 description=p,
                 color=embed_color
             )
@@ -233,7 +246,6 @@ CRITICAL RULES:
         else:
             await msg.edit(embed=embeds[0])
 
-    # 🔥 PREFIX COMMAND !help
     @commands.command(name="help")
     async def help(self, ctx):
         msg = await self.fancy_loading(ctx)
@@ -267,56 +279,6 @@ CRITICAL RULES:
         await msg.edit(embed=embed)
 
 
-async def get_item_info(name: str):
-    loop = asyncio.get_event_loop()
-
-    def fetch():
-        try:
-            res = requests.get(API, params={
-                "action": "query",
-                "list": "search",
-                "srsearch": name,
-                "format": "json"
-            }).json()
-
-            results = res["query"]["search"]
-            if not results:
-                return {"rarity": "Unknown", "price": "Unknown"}
-
-            title = results[0]["title"]
-
-            res2 = requests.get(API, params={
-                "action": "parse",
-                "page": title,
-                "prop": "text",
-                "format": "json"
-            }).json()
-
-            soup = BeautifulSoup(res2["parse"]["text"]["*"], "html.parser")
-            text = soup.get_text(" ", strip=True).lower()
-
-            rarity = "Unknown"
-            price = "Unknown"
-
-            for r in ["common", "uncommon", "rare", "epic", "legendary", "mythical"]:
-                if r in text:
-                    rarity = r.capitalize()
-                    break
-
-            import re
-            match = re.search(r'(\d+[.,]?\d*\s?[mb])', text)
-            if match:
-                price = match.group(1).upper()
-
-            return {"rarity": rarity, "price": price}
-
-        except:
-            return {"rarity": "Unknown", "price": "Unknown"}
-
-    return await loop.run_in_executor(None, fetch)
-
-
 async def setup(bot):
-    # Matiin default !help bawaan discord.py biar gak konflik
     bot.remove_command("help")
     await bot.add_cog(AI(bot))
