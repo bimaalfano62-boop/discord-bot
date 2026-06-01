@@ -32,7 +32,8 @@ async def main():
         await bot.load_extension("ai")
         await bot.load_extension("stock")
         await bot.load_extension("Troll")
-        await bot.load_extension("blox_stock") # <--- TAMBAHIN INI
+        await bot.load_extension("blox_stock")
+        await bot.load_extension("katla")
         await bot.start(TOKEN)
 
 asyncio.run(main())
