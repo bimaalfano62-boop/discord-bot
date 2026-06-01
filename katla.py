@@ -13,6 +13,16 @@ client = OpenAI(
 )
 # ============================================
 
+# 🔥 FALLBACK KATA DARURAT (Kalau AI mati total)
+FALLBACK_WORDS = {
+    "id_easy": ["SABUN|Alat pembersih badan", "BAJAK|Alat menggarap sawah", "KAPAL|Kendaraan laut", "RAJIN|Suka bekerja keras", "LAPAR|Ingin makan"],
+    "id_normal": ["KAWAN", "GATAL", "TALAN", "PAPAN", "LEBIH", "SADAR"],
+    "id_hard": ["ADZAN", "FIRAS", "GYMNA", "QURBI", "XYLOT", "ZAHID"],
+    "en_easy": ["APPLE|A red fruit", "BEACH|Sandy shore", "CHAIR|You sit on it", "DANCE|Move to music", "EAGLE|A big bird"],
+    "en_normal": ["BRAVE", "CRANE", "FLAME", "GRAPE", "STORM", "WORLD"],
+    "en_hard": ["XYLYL", "PYGMY", "QAJAQ", "ZYMES", "JINXS", "KYACK"]
+}
+
 # =========================
 # GAME LOGIC
 # =========================
@@ -28,14 +38,11 @@ class KatlaGame:
         self.answer = ""
         self.clue = None
 
-        # Parse AI result
-        # Format Easy: "KATA|Clue", Format Normal/Hard: "KATA"
         if difficulty == "easy" and "|" in word_data:
             parts = word_data.split("|")
             self.answer = parts[0].strip().upper()
             self.clue = parts[1].strip()
         else:
-            # Fallback cleanup kalau AI kasih extra words
             self.answer = re.sub(r'[^A-Z]', '', word_data.upper())[:5]
             self.clue = None
 
@@ -43,9 +50,6 @@ class KatlaGame:
         word = word.upper()
         if len(word) != 5 or not word.isalpha():
             return None, "Kata harus 5 huruf dan hanya huruf!"
-
-        # Karena pake AI generate, kita lepas validasi kamus biar ga ribet
-        # Kalau user nebak "AAAAA" ya biarin aja, gak bakal bener haha
 
         result = ['⬛'] * 5
         answer_chars = list(self.answer)
@@ -139,18 +143,21 @@ class DifficultyView(discord.ui.View):
         await self.start_game(interaction, "hard")
 
     async def start_game(self, interaction, difficulty):
-        # Defer karena nungguin AI generate kata
-        await interaction.response.defer(thinking=True)
+        await interaction.response.defer() # Defer dulu biar gak timeout
         
         word_data = await self.cog.generate_word(self.lang, difficulty)
-        if not word_data: 
-            return await interaction.followup.send("❌ AI gagal generate kata! Coba lagi.", ephemeral=True)
+        
+        # 🔥 KALO AI GAGAL, PAKAI FALLBACK DARURAT
+        if not word_data:
+            fallback_key = f"{self.lang}_{difficulty}"
+            word_data = random.choice(FALLBACK_WORDS.get(fallback_key, ["KAWAN|Teman", "BRAVE|Berani"]))
+            await interaction.followup.send("⚠️ AI lagi down nih, pakai kata dari database darurat aja ya!", ephemeral=True)
 
         game = KatlaGame(interaction.user.id, self.lang, difficulty, word_data)
         self.cog.active_games[interaction.user.id] = game
 
         embed, view = self.cog.create_game_embed(game)
-        await interaction.followup.edit_message(interaction.message.id, embed=embed, view=view)
+        await interaction.message.edit(embed=embed, view=view)
 
 class LanguageView(discord.ui.View):
     def __init__(self, cog):
@@ -175,7 +182,7 @@ class Katla(commands.Cog):
         self.bot = bot
         self.active_games = {}
 
-    # 🔥 AI WORD GENERATOR
+    # 🔥 AI WORD GENERATOR (FIXED MODEL & TIMEOUT)
     async def generate_word(self, lang, difficulty):
         def fetch():
             try:
@@ -195,10 +202,11 @@ class Katla(commands.Cog):
                         prompt = "Generate a rare or obscure 5-letter English word. Reply with ONLY the word. Example: XYLYL"
 
                 res = client.chat.completions.create(
-                    model="openai/gpt-oss-20b", # Ganti ke model lu
+                    model="google/gemma-2-9b-it:free", # 🔥 GANTI MODEL YANG PALING STABIL & GRATIS
                     messages=[{"role": "user", "content": prompt}],
-                    temperature=1.0, # Tinggiin biar random beneran
-                    max_tokens=20
+                    temperature=1.0, 
+                    max_tokens=20,
+                    extra_headers={"HTTP-Referer": "https://discordbot.com", "X-Title": "Katla Game"}
                 )
                 return res.choices[0].message.content.strip().upper()
             except Exception as e:
@@ -206,8 +214,10 @@ class Katla(commands.Cog):
                 return None
 
         try:
-            return await asyncio.wait_for(asyncio.to_thread(fetch), timeout=10.0)
+            # 🔥 TINGKATIN TIMEOUT JADI 20 DETIK
+            return await asyncio.wait_for(asyncio.to_thread(fetch), timeout=20.0)
         except asyncio.TimeoutError:
+            print("AI Katla Timeout")
             return None
 
     def create_game_embed(self, game):
@@ -240,6 +250,8 @@ class Katla(commands.Cog):
 
         embed = discord.Embed(title="🌍 Pilih Bahasa / Select Language", color=discord.Color.blue())
         await interaction.response.send_message(embed=embed, view=LanguageView(self))
+
+import random # Jangan lupa import random di atas
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Katla(bot))
