@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
 import asyncio
 import re
@@ -10,18 +10,18 @@ from openai import OpenAI
 # ================= SETUP AI =================
 client = OpenAI(
     api_key=os.getenv("OPENROUTER_API_KEY"),
-    base_url="https://openrouter.ai/api/v1"
+    base_url="https://api.openai.com/v1" # Balikin ke default OpenRouter
 )
 # ============================================
 
 # 🔥 FALLBACK KATA DARURAT
 FALLBACK_WORDS = {
-    "id_easy": ["SABUN|Alat pembersih badan", "BAJAK|Alat menggarap sawah", "KAPAL|Kendaraan laut", "RAJIN|Suka bekerja keras", "LAPAR|Ingin makan"],
-    "id_normal": ["KAWAN", "GATAL", "TALAN", "PAPAN", "LEBIH", "SADAR"],
-    "id_hard": ["ADZAN", "FIRAS", "GYMNA", "QURBI", "XYLOT", "ZAHID"],
-    "en_easy": ["APPLE|A red fruit", "BEACH|Sandy shore", "CHAIR|You sit on it", "DANCE|Move to music", "EAGLE|A big bird"],
-    "en_normal": ["BRAVE", "CRANE", "FLAME", "GRAPE", "STORM", "WORLD"],
-    "en_hard": ["XYLYL", "PYGMY", "QAJAQ", "ZYMES", "JINXS", "KYACK"]
+    "id_easy": ["SABUN|Alat pembersih badan", "BAJAK|Alat menggarap sawah", "KAPAL|Kendaraan laut", "RAJIN|Suka bekerja keras", "LAPAR|Ingin makan", "NASI|Makanan pokok", "ROTI|Makanan dari terigu", "PAYUNG|Pelindung dari hujan", "SATE|Makanan tusuk", "GIGI|Ada di mulut"],
+    "id_normal": ["KAWAN", "GATAL", "TALAN", "PAPAN", "LEBIH", "SADAR", "TAKUT", "RAMAI", "BERAT", "DAPAT", "KAKAK", "GURAU", "JEMUR", "LEBIH", "PAPAN", "MAKAN", "LALAT", "JARAK", "CAMAR", "RAKAT"],
+    "id_hard": ["ADZAN", "FIRAS", "GYMNA", "QURBI", "XYLOT", "ZAHID", "KHALQ", "SYURA", "WUQUF", "HAJIJ", "MAQAM", "NISKHA", "QADHA", "ZABUR", "KAFARA"],
+    "en_easy": ["APPLE|A red fruit", "BEACH|Sandy shore", "CHAIR|You sit on it", "DANCE|Move to music", "EAGLE|A big bird", "FLAME|Fire", "GRAPE|Purple fruit", "HOUSE|Where you live", "IMAGE|A picture", "JUICE|A drink"],
+    "en_normal": ["BRAVE", "CRANE", "FLAME", "GRAPE", "STORM", "WORLD", "QUEST", "PIXEL", "JOINT", "KNEEL", "LYING", "MOOSE", "NYMPH", "OZONE", "PLUMB"],
+    "en_hard": ["XYLYL", "PYGMY", "QAJAQ", "ZYMES", "JINXS", "KYACK", "VIVID", "WALTZ", "QUAFF", "PLEXI", "NYMPH", "LYMPH", "KAYOS", "JINX", "HYPHY"]
 }
 
 # =========================
@@ -108,12 +108,10 @@ class GuessModal(discord.ui.Modal, title='✏️ Tebak Kata'):
 
 class GameView(discord.ui.View):
     def __init__(self, cog, game):
-        # 🔥 TIMEOUT DINAIIKIN JADI 10 MENIT (600 detik)
-        super().__init__(timeout=600.0) 
+        super().__init__(timeout=600.0)
         self.cog = cog
         self.game = game
         
-        # 🔥 GANTI LABEL TOMBOL SURRENDER SESUAI BAHASA
         for child in self.children:
             if child.custom_id == "surrender_btn":
                 child.label = "🏳️ Menyerah" if game.lang == "id" else "🏳️ Surrender"
@@ -129,19 +127,16 @@ class GameView(discord.ui.View):
         for child in self.children:
             child.disabled = True
 
-    # 🔥 KALO 10 MENIT GA DIAPA-APAIN, MATIIN TOMBOL BIAR GA "INTERACTION FAILED"
     async def on_timeout(self):
         self.disable_all_buttons()
-        # Coba update pesan biar user tau game expired
         try:
-            # Cari message terakhir di cache (simple approach)
             if self.message:
                 embed = self.message.embeds[0]
                 embed.color = discord.Color.dark_grey()
                 embed.set_footer(text="⏰ Waktu habis! Game expired.")
                 await self.message.edit(embed=embed, view=self)
         except:
-            pass # Kalau gagal edit, biarin aja tombolnya mati
+            pass
 
     @discord.ui.button(label="✏️ Tebak", style=discord.ButtonStyle.success, custom_id="guess_btn")
     async def guess_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -156,7 +151,6 @@ class GameView(discord.ui.View):
         if not self.game.clue: return await interaction.response.send_message("❌ Clue gaada!", ephemeral=True)
         await interaction.response.send_message(f"💡 **Clue:** {self.game.clue}", ephemeral=True)
 
-    # 🔥 TOMBOL SURRENDER / MENYERAH
     @discord.ui.button(label="🏳️ Surrender", style=discord.ButtonStyle.secondary, custom_id="surrender_btn")
     async def surrender_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.game.user_id: return await interaction.response.send_message("❌ Bukan game lu!", ephemeral=True)
@@ -189,19 +183,14 @@ class DifficultyView(discord.ui.View):
         await self.start_game(interaction, "hard")
 
     async def start_game(self, interaction, difficulty):
-        await interaction.response.defer()
+        # 🔥 AMBIL KATA DARI QUEUE (INSTAN!)
+        word_data = self.cog.get_word_from_queue(self.lang, difficulty)
         
-        word_data = await self.cog.generate_word(self.lang, difficulty)
-        if not word_data:
-            fallback_key = f"{self.lang}_{difficulty}"
-            word_data = random.choice(FALLBACK_WORDS.get(fallback_key, ["KAWAN|Teman", "BRAVE|Berani"]))
-            await interaction.followup.send("⚠️ AI lagi down, pakai kata dari database darurat aja ya!", ephemeral=True)
-
         game = KatlaGame(interaction.user.id, self.lang, difficulty, word_data)
-        self.cog.active_games[interaction.user.id] = game
+        self.cog.active_games[interaction.user_id] = game
 
         embed, view = self.cog.create_game_embed(game)
-        await interaction.message.edit(embed=embed, view=view)
+        await interaction.response.edit_message(embed=embed, view=view)
 
 class LanguageView(discord.ui.View):
     def __init__(self, cog):
@@ -225,8 +214,49 @@ class Katla(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.active_games = {}
+        
+        # 🔥 QUEUE SYSTEM (SIM PAN KATA DI MEMORI)
+        self.word_queues = {key: [] for key in FALLBACK_WORDS.keys()}
+        
+        # Isi awal dari fallback biar langsung bisa main
+        for key, words in FALLBACK_WORDS.items():
+            self.word_queues[key].extend(words[:3])
+            
+        # Mulai background task
+        self.background_populate_words.start()
 
-    async def generate_word(self, lang, difficulty):
+    # 🔥 BACKGROUND TASK: ISI QUEUE TIAP 30 MENIT
+    @tasks.loop(minutes=30)
+    async def background_populate_words(self):
+        # Jangan over-queue, 5 kata per kategori udah cukup
+        max_queue_size = 5
+        
+        for key in FALLBACK_WORDS.keys():
+            if len(self.word_queues[key]) < max_queue_size:
+                lang, diff = key.split("_")
+                word = await self.generate_word_from_ai(lang, diff)
+                if word:
+                    self.word_queues[key].append(word)
+                    print(f"[Katla] Added word to {key} queue. Current size: {len(self.word_queues[key])}")
+
+    @background_populate_words.before_loop
+    async def before_background_task(self):
+        await self.bot.wait_until_ready()
+        print("[Katla] Background word generator started!")
+
+    # 🔥 AMBIL KATA DARI QUEUE (INSTAN TANPA NUNGGU AI)
+    def get_word_from_queue(self, lang, difficulty):
+        key = f"{lang}_{difficulty}"
+        
+        # Kalau queue ada isinya, ambil dari depan (FIFO)
+        if self.word_queues[key]:
+            return self.word_queues[key].pop(0)
+        
+        # Kalau queue kosong, pakai fallback
+        return random.choice(FALLBACK_WORDS.get(key, ["KAWAN|Teman", "BRAVE|Brave"]))
+
+    # 🔥 AI GENERATOR (DIPANGGIL DI BELAKANG LAYAR)
+    async def generate_word_from_ai(self, lang, difficulty):
         def fetch():
             try:
                 if lang == "id":
@@ -245,7 +275,7 @@ class Katla(commands.Cog):
                         prompt = "Generate a rare or obscure 5-letter English word. Reply with ONLY the word. Example: XYLYL"
 
                 res = client.chat.completions.create(
-                    model="huggingfaceh4/zephyr-7b-beta:free",
+                    model="google/gemma-2-9b-it:free", 
                     messages=[{"role": "user", "content": prompt}],
                     temperature=1.0, 
                     max_tokens=20,
@@ -253,13 +283,12 @@ class Katla(commands.Cog):
                 )
                 return res.choices[0].message.content.strip().upper()
             except Exception as e:
-                print(f"AI Katla Error: {e}")
+                print(f"AI Katla BG Error: {e}")
                 return None
 
         try:
             return await asyncio.wait_for(asyncio.to_thread(fetch), timeout=20.0)
         except asyncio.TimeoutError:
-            print("AI Katla Timeout")
             return None
 
     def create_game_embed(self, game):
@@ -273,6 +302,7 @@ class Katla(commands.Cog):
         footer = f"Sisa: {game.max_guesses - len(game.guesses)}/6"
         if game.difficulty == "easy" and not game.over:
             footer += " | Klik 💡 Clue untuk bantuan"
+            
         embed.set_footer(text=footer)
 
         view = GameView(self, game)
