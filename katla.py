@@ -245,7 +245,7 @@ class Katla(commands.Cog):
                         prompt = "Generate a rare or obscure 5-letter English word. Reply with ONLY the word. Example: XYLYL"
 
                 res = client.chat.completions.create(
-                    model="meta-llama/llama-3.1-8b-instruct:free",
+                    model="openai/gpt-oss-20b",
                     messages=[{"role": "user", "content": prompt}],
                     temperature=1.0, 
                     max_tokens=20,
