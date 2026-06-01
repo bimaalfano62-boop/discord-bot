@@ -4,6 +4,7 @@ from discord import app_commands
 import asyncio
 import re
 import os
+import random
 from openai import OpenAI
 
 # ================= SETUP AI =================
@@ -13,7 +14,7 @@ client = OpenAI(
 )
 # ============================================
 
-# 🔥 FALLBACK KATA DARURAT (Kalau AI mati total)
+# 🔥 FALLBACK KATA DARURAT
 FALLBACK_WORDS = {
     "id_easy": ["SABUN|Alat pembersih badan", "BAJAK|Alat menggarap sawah", "KAPAL|Kendaraan laut", "RAJIN|Suka bekerja keras", "LAPAR|Ingin makan"],
     "id_normal": ["KAWAN", "GATAL", "TALAN", "PAPAN", "LEBIH", "SADAR"],
@@ -107,22 +108,67 @@ class GuessModal(discord.ui.Modal, title='✏️ Tebak Kata'):
 
 class GameView(discord.ui.View):
     def __init__(self, cog, game):
-        super().__init__(timeout=None)
+        # 🔥 TIMEOUT DINAIIKIN JADI 10 MENIT (600 detik)
+        super().__init__(timeout=600.0) 
         self.cog = cog
         self.game = game
+        
+        # 🔥 GANTI LABEL TOMBOL SURRENDER SESUAI BAHASA
+        for child in self.children:
+            if child.custom_id == "surrender_btn":
+                child.label = "🏳️ Menyerah" if game.lang == "id" else "🏳️ Surrender"
+                
+        if game.difficulty != "easy":
+            for child in self.children:
+                if child.custom_id == "clue_btn": child.disabled = True
 
-    @discord.ui.button(label="✏️ Tebak", style=discord.ButtonStyle.success)
+        if game.over:
+            self.disable_all_buttons()
+
+    def disable_all_buttons(self):
+        for child in self.children:
+            child.disabled = True
+
+    # 🔥 KALO 10 MENIT GA DIAPA-APAIN, MATIIN TOMBOL BIAR GA "INTERACTION FAILED"
+    async def on_timeout(self):
+        self.disable_all_buttons()
+        # Coba update pesan biar user tau game expired
+        try:
+            # Cari message terakhir di cache (simple approach)
+            if self.message:
+                embed = self.message.embeds[0]
+                embed.color = discord.Color.dark_grey()
+                embed.set_footer(text="⏰ Waktu habis! Game expired.")
+                await self.message.edit(embed=embed, view=self)
+        except:
+            pass # Kalau gagal edit, biarin aja tombolnya mati
+
+    @discord.ui.button(label="✏️ Tebak", style=discord.ButtonStyle.success, custom_id="guess_btn")
     async def guess_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.game.user_id: return await interaction.response.send_message("❌ Bukan game lu!", ephemeral=True)
         if self.game.over: return await interaction.response.send_message("❌ Game udah selesai.", ephemeral=True)
         await interaction.response.send_modal(GuessModal(self.cog, self.game))
 
-    @discord.ui.button(label="💡 Clue", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="💡 Clue", style=discord.ButtonStyle.primary, custom_id="clue_btn")
     async def clue_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.game.user_id: return await interaction.response.send_message("❌ Bukan game lu!", ephemeral=True)
         if self.game.difficulty != "easy": return await interaction.response.send_message("❌ Clue cuma buat mode Easy!", ephemeral=True)
         if not self.game.clue: return await interaction.response.send_message("❌ Clue gaada!", ephemeral=True)
         await interaction.response.send_message(f"💡 **Clue:** {self.game.clue}", ephemeral=True)
+
+    # 🔥 TOMBOL SURRENDER / MENYERAH
+    @discord.ui.button(label="🏳️ Surrender", style=discord.ButtonStyle.secondary, custom_id="surrender_btn")
+    async def surrender_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.game.user_id: return await interaction.response.send_message("❌ Bukan game lu!", ephemeral=True)
+        if self.game.over: return await interaction.response.send_message("❌ Game udah selesai.", ephemeral=True)
+
+        self.game.over = True
+        self.game.won = False
+        self.disable_all_buttons()
+
+        embed, view = self.cog.create_game_embed(self.game)
+        await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.followup.send(f"🏳️ {interaction.user.mention} menyerah! Jawabannya adalah **{self.game.answer}**.", ephemeral=False)
 
 class DifficultyView(discord.ui.View):
     def __init__(self, cog, lang):
@@ -143,15 +189,13 @@ class DifficultyView(discord.ui.View):
         await self.start_game(interaction, "hard")
 
     async def start_game(self, interaction, difficulty):
-        await interaction.response.defer() # Defer dulu biar gak timeout
+        await interaction.response.defer()
         
         word_data = await self.cog.generate_word(self.lang, difficulty)
-        
-        # 🔥 KALO AI GAGAL, PAKAI FALLBACK DARURAT
         if not word_data:
             fallback_key = f"{self.lang}_{difficulty}"
             word_data = random.choice(FALLBACK_WORDS.get(fallback_key, ["KAWAN|Teman", "BRAVE|Berani"]))
-            await interaction.followup.send("⚠️ AI lagi down nih, pakai kata dari database darurat aja ya!", ephemeral=True)
+            await interaction.followup.send("⚠️ AI lagi down, pakai kata dari database darurat aja ya!", ephemeral=True)
 
         game = KatlaGame(interaction.user.id, self.lang, difficulty, word_data)
         self.cog.active_games[interaction.user.id] = game
@@ -182,7 +226,6 @@ class Katla(commands.Cog):
         self.bot = bot
         self.active_games = {}
 
-    # 🔥 AI WORD GENERATOR (FIXED MODEL & TIMEOUT)
     async def generate_word(self, lang, difficulty):
         def fetch():
             try:
@@ -202,7 +245,7 @@ class Katla(commands.Cog):
                         prompt = "Generate a rare or obscure 5-letter English word. Reply with ONLY the word. Example: XYLYL"
 
                 res = client.chat.completions.create(
-                    model="google/gemma-2-9b-it:free", # 🔥 GANTI MODEL YANG PALING STABIL & GRATIS
+                    model="google/gemma-2-9b-it:free",
                     messages=[{"role": "user", "content": prompt}],
                     temperature=1.0, 
                     max_tokens=20,
@@ -214,7 +257,6 @@ class Katla(commands.Cog):
                 return None
 
         try:
-            # 🔥 TINGKATIN TIMEOUT JADI 20 DETIK
             return await asyncio.wait_for(asyncio.to_thread(fetch), timeout=20.0)
         except asyncio.TimeoutError:
             print("AI Katla Timeout")
@@ -234,13 +276,6 @@ class Katla(commands.Cog):
         embed.set_footer(text=footer)
 
         view = GameView(self, game)
-        if game.difficulty != "easy":
-            for child in view.children:
-                if child.label == "💡 Clue": child.disabled = True
-
-        if game.over:
-            for child in view.children: child.disabled = True
-
         return embed, view
 
     @app_commands.command(name="katla", description="Mainkan Katla (Wordle ID/EN) - AI Generated!")
@@ -250,8 +285,6 @@ class Katla(commands.Cog):
 
         embed = discord.Embed(title="🌍 Pilih Bahasa / Select Language", color=discord.Color.blue())
         await interaction.response.send_message(embed=embed, view=LanguageView(self))
-
-import random # Jangan lupa import random di atas
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Katla(bot))
