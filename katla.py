@@ -8,7 +8,7 @@ import google.generativeai as genai
 
 # ================= SETUP AI (GOOGLE GEMINI) =================
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-gemini_model = genai.GenerativeModel('gemini-1.5-flash')
+gemini_model = genai.GenerativeModel('gemini-2.5-flash')
 
 # Kunci untuk queue (tanpa fallback words)
 VALID_KEYS = ["id_easy", "id_normal", "id_hard", "en_easy", "en_normal", "en_hard"]
@@ -276,7 +276,7 @@ class Katla(commands.Cog):
         print(f"[Katla] AI failed completely for {key}.")
         return None
 
-    # 🔥 AI GENERATOR (PAKAI GOOGLE GEMINI FLASH)
+    # 🔥 AI GENERATOR (PAKAI GOOGLE GEMINI 2.5 FLASH)
     async def generate_word_from_ai(self, lang, difficulty):
         def fetch():
             try:
