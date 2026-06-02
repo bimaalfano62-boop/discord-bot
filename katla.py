@@ -7,10 +7,10 @@ import os
 import random
 from openai import OpenAI
 
-# ================= SETUP AI (GROQ) =================
+# ================= SETUP AI (OPENROUTER - FREE) =================
 client = OpenAI(
-    api_key=os.getenv("GROQ_API_KEY"),
-    base_url="https://api.groq.com/openai/v1"
+    api_key=os.getenv("OPENROUTER_API_KEY"), # Ganti env variable di server lu!
+    base_url="https://openrouter.ai/api/v1"
 )
 # ==========================================================
 
@@ -190,7 +190,7 @@ class GameView(discord.ui.View):
 
 class DifficultyView(discord.ui.View):
     def __init__(self, cog, lang):
-        super().__init__(timeout=180.0)  # ✅ FIX: timeout 3 menit, bukan None
+        super().__init__(timeout=180.0)
         self.cog = cog
         self.lang = lang
 
@@ -241,7 +241,7 @@ class DifficultyView(discord.ui.View):
 
 class LanguageView(discord.ui.View):
     def __init__(self, cog):
-        super().__init__(timeout=180.0)  # ✅ FIX: timeout 3 menit, bukan None
+        super().__init__(timeout=180.0)
         self.cog = cog
 
     async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item):
@@ -323,7 +323,7 @@ class Katla(commands.Cog):
 
         return random.choice(FALLBACK_WORDS.get(key, ["KAWAN|Teman", "BRAVE|Brave"]))
 
-    # 🔥 AI GENERATOR (PAKAI LLAMA 3.3 70B)
+    # 🔥 AI GENERATOR (PAKAI OPENROUTER - LLAMA 3.1 8B FREE)
     async def generate_word_from_ai(self, lang, difficulty):
         def fetch():
             try:
@@ -343,7 +343,7 @@ class Katla(commands.Cog):
                         prompt = "Generate a rare or obscure 5-letter English word. Reply with ONLY the word. Example: XYLYL"
 
                 res = client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
+                    model="meta-llama/llama-3.1-8b-instruct:free", # Model gratis OpenRouter
                     messages=[{"role": "user", "content": prompt}],
                     temperature=1.0,
                     max_tokens=20
