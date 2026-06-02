@@ -5,13 +5,11 @@ import asyncio
 import re
 import os
 import random
-from openai import OpenAI
+import google.generativeai as genai # ✅ GANTI KE GEMINI
 
-# ================= SETUP AI (OPENROUTER - FREE) =================
-client = OpenAI(
-    api_key=os.getenv("OPENROUTER_API_KEY_2"),
-    base_url="https://openrouter.ai/api/v1"
-)
+# ================= SETUP AI (GOOGLE GEMINI - FREE & STABIL) =================
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+gemini_model = genai.GenerativeModel('gemini-1.5-flash')
 # ==========================================================
 
 # 🔥 FALLBACK KATA DARURAT
@@ -219,7 +217,6 @@ class DifficultyView(discord.ui.View):
     async def start_game(self, interaction, difficulty):
         try:
             word_data = self.cog.get_word_from_queue(self.lang, difficulty)
-            # ✅ FIX: interaction.user.id (bukan user_id)
             game = KatlaGame(interaction.user.id, self.lang, difficulty, word_data)
             self.cog.active_games[interaction.user.id] = game
 
@@ -318,7 +315,7 @@ class Katla(commands.Cog):
 
         return random.choice(FALLBACK_WORDS.get(key, ["KAWAN|Teman", "BRAVE|Brave"]))
 
-    # 🔥 AI GENERATOR (PAKAI OPENROUTER - LLAMA 3.1 8B FREE)
+    # 🔥 AI GENERATOR (PAKAI GOOGLE GEMINI FLASH)
     async def generate_word_from_ai(self, lang, difficulty):
         def fetch():
             try:
@@ -337,13 +334,9 @@ class Katla(commands.Cog):
                     else:
                         prompt = "Generate a rare or obscure 5-letter English word. Reply with ONLY the word. Example: XYLYL"
 
-                res = client.chat.completions.create(
-                    model="meta-llama/llama-3.1-8b-instruct:free",
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=1.0,
-                    max_tokens=20
-                )
-                return res.choices[0].message.content.strip().upper()
+                # PAKAI GEMINI
+                response = gemini_model.generate_content(prompt)
+                return response.text.strip().upper()
             except Exception as e:
                 print(f"AI Katla BG Error: {e}")
                 return None
