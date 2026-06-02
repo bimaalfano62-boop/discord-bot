@@ -4,15 +4,15 @@ from discord import app_commands
 import asyncio
 import re
 import os
-import google.generativeai as genai
+from groq import Groq
 
-# ================= SETUP AI (GOOGLE GEMINI) =================
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-gemini_model = genai.GenerativeModel('gemini-2.5-flash')
+# ================= SETUP AI (GROQ) =================
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+GROQ_MODEL = "llama-3.3-70b-versatile"  # Alternatif: "openai/gpt-oss-120b"
 
 # Kunci untuk queue (tanpa fallback words)
 VALID_KEYS = ["id_easy", "id_normal", "id_hard", "en_easy", "en_normal", "en_hard"]
-# ==========================================================
+# ===================================================
 
 # =========================
 # GAME LOGIC
@@ -185,13 +185,13 @@ class DifficultyView(discord.ui.View):
 
     async def start_game(self, interaction, difficulty):
         await interaction.response.defer()
-        
+
         try:
             word_data = await self.cog.get_word_from_queue(self.lang, difficulty)
-            
+
             if not word_data:
                 return await interaction.edit_original_response(
-                    content="❌ **AI Gagal!** Server AI sedang down atau API Key belum di-set. Coba lagi nanti.", 
+                    content="❌ **AI Gagal!** Server AI sedang down atau API Key belum di-set. Coba lagi nanti.",
                     embed=None
                 )
 
@@ -250,7 +250,7 @@ class Katla(commands.Cog):
     async def get_word_from_queue(self, lang, difficulty):
         key = f"{lang}_{difficulty}"
 
-        # 1. Coba ambil dari antrian (Kalau ada stok AI)
+        # 1. Coba ambil dari antrian (kalau ada stok AI)
         while self.word_queues[key]:
             word_data = self.word_queues[key].pop(0)
             clean_word = re.sub(r'[^A-Z]', '', word_data.upper().split("|")[0])
@@ -260,10 +260,10 @@ class Katla(commands.Cog):
             else:
                 print(f"[Katla] Invalid word from AI Queue: {word_data}. Discarding.")
 
-        # 2. Kalau antrian kosong, GENERATE LANGSUNG PAKAI AI (ON-THE-FLY)
+        # 2. Kalau antrian kosong, generate langsung on-the-fly
         print(f"[Katla] Queue empty for {key}, generating on the fly...")
         word_data = await self.generate_word_from_ai(lang, difficulty)
-        
+
         if word_data:
             clean_word = re.sub(r'[^A-Z]', '', word_data.upper().split("|")[0])
             if len(clean_word) == 5:
@@ -272,31 +272,36 @@ class Katla(commands.Cog):
             else:
                 print(f"[Katla] Invalid word from On-The-Fly AI: {word_data}.")
 
-        # 3. AI down / gagal total, kembalikan None
+        # 3. AI down / gagal total
         print(f"[Katla] AI failed completely for {key}.")
         return None
 
-    # 🔥 AI GENERATOR (PAKAI GOOGLE GEMINI 2.5 FLASH)
+    # 🔥 AI GENERATOR (GROQ - llama-3.3-70b-versatile)
     async def generate_word_from_ai(self, lang, difficulty):
         def fetch():
             try:
                 if lang == "id":
                     if difficulty == "easy":
-                        prompt = "Generate a common 5-letter Indonesian word and a short clue. Format exactly like this: WORD|Clue. Example: SABUN|Alat pembersih badan. Reply with ONLY the format."
+                        prompt = "Generate a common 5-letter Indonesian word and a short clue. Format exactly like this: WORD|Clue. Example: SABUN|Alat pembersih badan. Reply with ONLY the format, nothing else."
                     elif difficulty == "normal":
-                        prompt = "Generate a common 5-letter Indonesian word. Reply with ONLY the word. Example: KAWAN"
+                        prompt = "Generate a common 5-letter Indonesian word. Reply with ONLY the word, nothing else. Example: KAWAN"
                     else:
-                        prompt = "Generate a rare or obscure 5-letter Indonesian word from KBBI. Reply with ONLY the word. Example: ADZAN"
+                        prompt = "Generate a rare or obscure 5-letter Indonesian word from KBBI. Reply with ONLY the word, nothing else. Example: ADZAN"
                 else:
                     if difficulty == "easy":
-                        prompt = "Generate a common 5-letter English word and a short clue. Format exactly like this: WORD|Clue. Example: APPLE|A red fruit. Reply with ONLY the format."
+                        prompt = "Generate a common 5-letter English word and a short clue. Format exactly like this: WORD|Clue. Example: APPLE|A red fruit. Reply with ONLY the format, nothing else."
                     elif difficulty == "normal":
-                        prompt = "Generate a common 5-letter English word. Reply with ONLY the word. Example: BRAVE"
+                        prompt = "Generate a common 5-letter English word. Reply with ONLY the word, nothing else. Example: BRAVE"
                     else:
-                        prompt = "Generate a rare or obscure 5-letter English word. Reply with ONLY the word. Example: XYLYL"
+                        prompt = "Generate a rare or obscure 5-letter English word. Reply with ONLY the word, nothing else. Example: XYLYL"
 
-                response = gemini_model.generate_content(prompt)
-                return response.text.strip().upper()
+                response = groq_client.chat.completions.create(
+                    model=GROQ_MODEL,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=50,
+                    temperature=1.0,
+                )
+                return response.choices[0].message.content.strip().upper()
             except Exception as e:
                 print(f"AI Katla Error: {e}")
                 return None
