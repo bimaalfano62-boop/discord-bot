@@ -5,14 +5,14 @@ import asyncio
 import re
 import os
 import random
-import google.generativeai as genai # ✅ GANTI KE GEMINI
+import google.generativeai as genai
 
-# ================= SETUP AI (GOOGLE GEMINI - FREE & STABIL) =================
+# ================= SETUP AI (GOOGLE GEMINI) =================
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 gemini_model = genai.GenerativeModel('gemini-1.5-flash')
 # ==========================================================
 
-# 🔥 FALLBACK KATA DARURAT
+# 🔥 FALLBACK KATA DARURAT (HANYA KALAU AI MATI TOTAL)
 FALLBACK_WORDS = {
     "id_easy": ["SABUN|Alat pembersih badan", "BAJAK|Alat menggarap sawah", "KAPAL|Kendaraan laut", "RAJIN|Suka bekerja keras", "LAPAR|Ingin makan", "NASI|Makanan pokok", "ROTI|Makanan dari terigu", "PAYUNG|Pelindung dari hujan", "SATE|Makanan tusuk", "GIGI|Ada di mulut"],
     "id_normal": ["KAWAN", "GATAL", "TALAN", "PAPAN", "LEBIH", "SADAR", "TAKUT", "RAMAI", "BERAT", "DAPAT", "KAKAK", "GURAU", "JEMUR", "MAKAN", "LALAT", "JARAK", "CAMAR", "RAKAT"],
@@ -107,12 +107,6 @@ class GuessModal(discord.ui.Modal, title='✏️ Tebak Kata'):
                 await interaction.followup.send(msg)
         except Exception as e:
             print(f"[GuessModal Error] {e}")
-            try:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
-                else:
-                    await interaction.followup.send(f"❌ Error: {e}", ephemeral=True)
-            except: pass
 
 class GameView(discord.ui.View):
     def __init__(self, cog, game):
@@ -145,9 +139,6 @@ class GameView(discord.ui.View):
                 embed.set_footer(text="⏰ Waktu habis! Game expired.")
                 await self.message.edit(embed=embed, view=self)
         except: pass
-
-    async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item):
-        print(f"[GameView Error] {error}")
 
     @discord.ui.button(label="✏️ Tebak", style=discord.ButtonStyle.success, custom_id="guess_btn")
     async def guess_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -188,20 +179,6 @@ class DifficultyView(discord.ui.View):
         self.cog = cog
         self.lang = lang
 
-    async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item):
-        print(f"[DifficultyView Error] {error}")
-
-    async def on_timeout(self):
-        for child in self.children:
-            child.disabled = True
-        try:
-            if self.message:
-                embed = self.message.embeds[0]
-                embed.color = discord.Color.dark_grey()
-                embed.set_footer(text="⏰ Waktu habis!")
-                await self.message.edit(embed=embed, view=self)
-        except: pass
-
     @discord.ui.button(label="🟢 Easy", style=discord.ButtonStyle.success, custom_id="diff_easy")
     async def easy(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.start_game(interaction, "easy")
@@ -215,61 +192,34 @@ class DifficultyView(discord.ui.View):
         await self.start_game(interaction, "hard")
 
     async def start_game(self, interaction, difficulty):
+        # Defer biar gak timeout kalau AI lama nyari katanya
+        await interaction.response.defer()
+        
         try:
-            word_data = self.cog.get_word_from_queue(self.lang, difficulty)
+            word_data = await self.cog.get_word_from_queue(self.lang, difficulty)
             game = KatlaGame(interaction.user.id, self.lang, difficulty, word_data)
             self.cog.active_games[interaction.user.id] = game
 
             embed, view = self.cog.create_game_embed(game)
-            await interaction.response.edit_message(embed=embed, view=view)
+            await interaction.edit_original_response(embed=embed, view=view)
         except Exception as e:
             print(f"[start_game Error] {e}")
-            import traceback
-            traceback.print_exc()
-            msg = f"❌ Gagal memulai game! Error: `{type(e).__name__}: {e}`"
-            if not interaction.response.is_done():
-                await interaction.response.send_message(msg, ephemeral=True)
-            else:
-                await interaction.followup.send(msg, ephemeral=True)
+            await interaction.edit_original_response(content=f"❌ Gagal memulai game! Error: `{e}`", embed=None)
 
 class LanguageView(discord.ui.View):
     def __init__(self, cog):
         super().__init__(timeout=180.0)
         self.cog = cog
 
-    async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item):
-        print(f"[LanguageView Error] {error}")
-
-    async def on_timeout(self):
-        for child in self.children:
-            child.disabled = True
-        try:
-            if self.message:
-                embed = self.message.embeds[0]
-                embed.color = discord.Color.dark_grey()
-                embed.set_footer(text="⏰ Waktu habis!")
-                await self.message.edit(embed=embed, view=self)
-        except: pass
-
     @discord.ui.button(label="🇮🇩 Indonesia", style=discord.ButtonStyle.primary, custom_id="lang_id")
     async def indo(self, interaction: discord.Interaction, button: discord.ui.Button):
-        try:
-            embed = discord.Embed(title="🇮🇩 Pilih Difficulty", description="Mau mode susah apa gampang?", color=discord.Color.blue())
-            await interaction.response.edit_message(embed=embed, view=DifficultyView(self.cog, "id"))
-        except Exception as e:
-            print(f"[LanguageView ID Error] {e}")
-            if not interaction.response.is_done():
-                await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
+        embed = discord.Embed(title="🇮🇩 Pilih Difficulty", description="Mau mode susah apa gampang?", color=discord.Color.blue())
+        await interaction.response.edit_message(embed=embed, view=DifficultyView(self.cog, "id"))
 
     @discord.ui.button(label="🇬🇧 English", style=discord.ButtonStyle.secondary, custom_id="lang_en")
     async def eng(self, interaction: discord.Interaction, button: discord.ui.Button):
-        try:
-            embed = discord.Embed(title="🇬🇧 Select Difficulty", description="How hard do you want it?", color=discord.Color.blue())
-            await interaction.response.edit_message(embed=embed, view=DifficultyView(self.cog, "en"))
-        except Exception as e:
-            print(f"[LanguageView EN Error] {e}")
-            if not interaction.response.is_done():
-                await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
+        embed = discord.Embed(title="🇬🇧 Select Difficulty", description="How hard do you want it?", color=discord.Color.blue())
+        await interaction.response.edit_message(embed=embed, view=DifficultyView(self.cog, "en"))
 
 # =========================
 # COG
@@ -278,16 +228,14 @@ class Katla(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.active_games = {}
+        # Queue murni kosong di awal, gak diisi fallback!
         self.word_queues = {key: [] for key in FALLBACK_WORDS.keys()}
-
-        for key, words in FALLBACK_WORDS.items():
-            self.word_queues[key].extend(words[:3])
 
         self.background_populate_words.start()
 
-    @tasks.loop(minutes=30)
+    @tasks.loop(minutes=5) # Diubah jadi 5 menit biar queue cepat keisi AI
     async def background_populate_words(self):
-        max_queue_size = 5
+        max_queue_size = 3
 
         for key in FALLBACK_WORDS.keys():
             if len(self.word_queues[key]) < max_queue_size:
@@ -295,24 +243,40 @@ class Katla(commands.Cog):
                 word = await self.generate_word_from_ai(lang, diff)
                 if word:
                     self.word_queues[key].append(word)
-                    print(f"[Katla] Added word to {key} queue. Current size: {len(self.word_queues[key])}")
+                    print(f"[Katla BG] Added AI word to {key} queue. Size: {len(self.word_queues[key])}")
 
     @background_populate_words.before_loop
     async def before_background_task(self):
         await self.bot.wait_until_ready()
         print("[Katla] Background word generator started!")
 
-    def get_word_from_queue(self, lang, difficulty):
+    async def get_word_from_queue(self, lang, difficulty):
         key = f"{lang}_{difficulty}"
 
+        # 1. Coba ambil dari antrian (Kalau ada stok AI)
         if self.word_queues[key]:
             word_data = self.word_queues[key].pop(0)
             clean_word = re.sub(r'[^A-Z]', '', word_data.upper().split("|")[0])
             if len(clean_word) == 5:
+                print(f"[Katla] Using word from AI Queue.")
                 return word_data
             else:
-                print(f"[Katla] Invalid word from AI: {word_data}. Falling back.")
+                print(f"[Katla] Invalid word from AI Queue: {word_data}.")
 
+        # 2. Kalau antrian kosong, GENERATE LANGSUNG PAKAI AI (ON-THE-FLY)
+        print(f"[Katla] Queue empty for {key}, generating on the fly...")
+        word_data = await self.generate_word_from_ai(lang, difficulty)
+        
+        if word_data:
+            clean_word = re.sub(r'[^A-Z]', '', word_data.upper().split("|")[0])
+            if len(clean_word) == 5:
+                print(f"[Katla] Successfully generated on the fly!")
+                return word_data
+            else:
+                print(f"[Katla] Invalid word from On-The-Fly AI: {word_data}.")
+
+        # 3. Kalau AI down / API key gak ada, baru pakai Fallback darurat
+        print(f"[Katla] AI failed! Using FALLBACK for {key}.")
         return random.choice(FALLBACK_WORDS.get(key, ["KAWAN|Teman", "BRAVE|Brave"]))
 
     # 🔥 AI GENERATOR (PAKAI GOOGLE GEMINI FLASH)
@@ -334,16 +298,16 @@ class Katla(commands.Cog):
                     else:
                         prompt = "Generate a rare or obscure 5-letter English word. Reply with ONLY the word. Example: XYLYL"
 
-                # PAKAI GEMINI
                 response = gemini_model.generate_content(prompt)
                 return response.text.strip().upper()
             except Exception as e:
-                print(f"AI Katla BG Error: {e}")
+                print(f"AI Katla Error: {e}")
                 return None
 
         try:
-            return await asyncio.wait_for(asyncio.to_thread(fetch), timeout=15.0)
+            return await asyncio.wait_for(asyncio.to_thread(fetch), timeout=10.0)
         except asyncio.TimeoutError:
+            print("AI Katla Error: Timeout")
             return None
 
     def create_game_embed(self, game):
