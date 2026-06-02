@@ -9,7 +9,7 @@ from openai import OpenAI
 
 # ================= SETUP AI (OPENROUTER - FREE) =================
 client = OpenAI(
-    api_key=os.getenv("OPENROUTER_API_KEY_2"), # Pastikan ini sudah di-set di server lu!
+    api_key=os.getenv("OPENROUTER_API_KEY"),
     base_url="https://openrouter.ai/api/v1"
 )
 # ==========================================================
@@ -219,8 +219,9 @@ class DifficultyView(discord.ui.View):
     async def start_game(self, interaction, difficulty):
         try:
             word_data = self.cog.get_word_from_queue(self.lang, difficulty)
-            game = KatlaGame(interaction.user_id, self.lang, difficulty, word_data)
-            self.cog.active_games[interaction.user_id] = game
+            # ✅ FIX: interaction.user.id (bukan user_id)
+            game = KatlaGame(interaction.user.id, self.lang, difficulty, word_data)
+            self.cog.active_games[interaction.user.id] = game
 
             embed, view = self.cog.create_game_embed(game)
             await interaction.response.edit_message(embed=embed, view=view)
@@ -309,7 +310,6 @@ class Katla(commands.Cog):
 
         if self.word_queues[key]:
             word_data = self.word_queues[key].pop(0)
-            # Validasi kata dari AI, harus pas 5 huruf (setelah diilangin simbol aneh)
             clean_word = re.sub(r'[^A-Z]', '', word_data.upper().split("|")[0])
             if len(clean_word) == 5:
                 return word_data
@@ -372,7 +372,7 @@ class Katla(commands.Cog):
 
     @app_commands.command(name="katla", description="Mainkan Katla (Wordle ID/EN) - AI Generated!")
     async def katla(self, interaction: discord.Interaction):
-        if interaction.user.id in self.active_games and not self.active_games[interaction.user_id].over:
+        if interaction.user.id in self.active_games and not self.active_games[interaction.user.id].over:
             return await interaction.response.send_message("❌ Masih ada game aktif!", ephemeral=True)
 
         embed = discord.Embed(title="🌍 Pilih Bahasa / Select Language", color=discord.Color.blue())
