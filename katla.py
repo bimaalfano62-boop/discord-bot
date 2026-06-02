@@ -9,7 +9,7 @@ from openai import OpenAI
 
 # ================= SETUP AI (OPENROUTER - FREE) =================
 client = OpenAI(
-    api_key=os.getenv("OPENROUTER_API_KEY"), # Ganti env variable di server lu!
+    api_key=os.getenv("OPENROUTER_API_KEY_2"), # Pastikan ini sudah di-set di server lu!
     base_url="https://openrouter.ai/api/v1"
 )
 # ==========================================================
@@ -42,7 +42,7 @@ class KatlaGame:
         if difficulty == "easy" and "|" in word_data:
             parts = word_data.split("|")
             self.answer = parts[0].strip().upper()
-            self.clue = parts[1].strip()
+            self.clue = parts[1].strip() if len(parts) > 1 else None
         else:
             self.answer = re.sub(r'[^A-Z]', '', word_data.upper())[:5]
             self.clue = None
@@ -109,10 +109,12 @@ class GuessModal(discord.ui.Modal, title='✏️ Tebak Kata'):
                 await interaction.followup.send(msg)
         except Exception as e:
             print(f"[GuessModal Error] {e}")
-            if not interaction.response.is_done():
-                await interaction.response.send_message("❌ Terjadi error!", ephemeral=True)
-            else:
-                await interaction.followup.send("❌ Terjadi error!", ephemeral=True)
+            try:
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
+                else:
+                    await interaction.followup.send(f"❌ Error: {e}", ephemeral=True)
+            except: pass
 
 class GameView(discord.ui.View):
     def __init__(self, cog, game):
@@ -144,16 +146,10 @@ class GameView(discord.ui.View):
                 embed.color = discord.Color.dark_grey()
                 embed.set_footer(text="⏰ Waktu habis! Game expired.")
                 await self.message.edit(embed=embed, view=self)
-        except:
-            pass
+        except: pass
 
     async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item):
         print(f"[GameView Error] {error}")
-        try:
-            if not interaction.response.is_done():
-                await interaction.response.send_message("❌ Terjadi error!", ephemeral=True)
-        except:
-            pass
 
     @discord.ui.button(label="✏️ Tebak", style=discord.ButtonStyle.success, custom_id="guess_btn")
     async def guess_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -196,11 +192,6 @@ class DifficultyView(discord.ui.View):
 
     async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item):
         print(f"[DifficultyView Error] {error}")
-        try:
-            if not interaction.response.is_done():
-                await interaction.response.send_message("❌ Terjadi error!", ephemeral=True)
-        except:
-            pass
 
     async def on_timeout(self):
         for child in self.children:
@@ -211,8 +202,7 @@ class DifficultyView(discord.ui.View):
                 embed.color = discord.Color.dark_grey()
                 embed.set_footer(text="⏰ Waktu habis!")
                 await self.message.edit(embed=embed, view=self)
-        except:
-            pass
+        except: pass
 
     @discord.ui.button(label="🟢 Easy", style=discord.ButtonStyle.success, custom_id="diff_easy")
     async def easy(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -236,8 +226,13 @@ class DifficultyView(discord.ui.View):
             await interaction.response.edit_message(embed=embed, view=view)
         except Exception as e:
             print(f"[start_game Error] {e}")
+            import traceback
+            traceback.print_exc()
+            msg = f"❌ Gagal memulai game! Error: `{type(e).__name__}: {e}`"
             if not interaction.response.is_done():
-                await interaction.response.send_message("❌ Gagal memulai game! Coba lagi.", ephemeral=True)
+                await interaction.response.send_message(msg, ephemeral=True)
+            else:
+                await interaction.followup.send(msg, ephemeral=True)
 
 class LanguageView(discord.ui.View):
     def __init__(self, cog):
@@ -246,11 +241,6 @@ class LanguageView(discord.ui.View):
 
     async def on_error(self, interaction: discord.Interaction, error: Exception, item: discord.ui.Item):
         print(f"[LanguageView Error] {error}")
-        try:
-            if not interaction.response.is_done():
-                await interaction.response.send_message("❌ Terjadi error!", ephemeral=True)
-        except:
-            pass
 
     async def on_timeout(self):
         for child in self.children:
@@ -261,8 +251,7 @@ class LanguageView(discord.ui.View):
                 embed.color = discord.Color.dark_grey()
                 embed.set_footer(text="⏰ Waktu habis!")
                 await self.message.edit(embed=embed, view=self)
-        except:
-            pass
+        except: pass
 
     @discord.ui.button(label="🇮🇩 Indonesia", style=discord.ButtonStyle.primary, custom_id="lang_id")
     async def indo(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -272,7 +261,7 @@ class LanguageView(discord.ui.View):
         except Exception as e:
             print(f"[LanguageView ID Error] {e}")
             if not interaction.response.is_done():
-                await interaction.response.send_message("❌ Gagal! Coba lagi.", ephemeral=True)
+                await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
 
     @discord.ui.button(label="🇬🇧 English", style=discord.ButtonStyle.secondary, custom_id="lang_en")
     async def eng(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -282,7 +271,7 @@ class LanguageView(discord.ui.View):
         except Exception as e:
             print(f"[LanguageView EN Error] {e}")
             if not interaction.response.is_done():
-                await interaction.response.send_message("❌ Failed! Try again.", ephemeral=True)
+                await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
 
 # =========================
 # COG
@@ -319,7 +308,13 @@ class Katla(commands.Cog):
         key = f"{lang}_{difficulty}"
 
         if self.word_queues[key]:
-            return self.word_queues[key].pop(0)
+            word_data = self.word_queues[key].pop(0)
+            # Validasi kata dari AI, harus pas 5 huruf (setelah diilangin simbol aneh)
+            clean_word = re.sub(r'[^A-Z]', '', word_data.upper().split("|")[0])
+            if len(clean_word) == 5:
+                return word_data
+            else:
+                print(f"[Katla] Invalid word from AI: {word_data}. Falling back.")
 
         return random.choice(FALLBACK_WORDS.get(key, ["KAWAN|Teman", "BRAVE|Brave"]))
 
@@ -343,7 +338,7 @@ class Katla(commands.Cog):
                         prompt = "Generate a rare or obscure 5-letter English word. Reply with ONLY the word. Example: XYLYL"
 
                 res = client.chat.completions.create(
-                    model="meta-llama/llama-3.1-8b-instruct:free", # Model gratis OpenRouter
+                    model="meta-llama/llama-3.1-8b-instruct:free",
                     messages=[{"role": "user", "content": prompt}],
                     temperature=1.0,
                     max_tokens=20
@@ -377,7 +372,7 @@ class Katla(commands.Cog):
 
     @app_commands.command(name="katla", description="Mainkan Katla (Wordle ID/EN) - AI Generated!")
     async def katla(self, interaction: discord.Interaction):
-        if interaction.user.id in self.active_games and not self.active_games[interaction.user.id].over:
+        if interaction.user.id in self.active_games and not self.active_games[interaction.user_id].over:
             return await interaction.response.send_message("❌ Masih ada game aktif!", ephemeral=True)
 
         embed = discord.Embed(title="🌍 Pilih Bahasa / Select Language", color=discord.Color.blue())
