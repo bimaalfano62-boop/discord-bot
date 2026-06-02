@@ -245,7 +245,7 @@ class Katla(commands.Cog):
         
         return random.choice(FALLBACK_WORDS.get(key, ["KAWAN|Teman", "BRAVE|Brave"]))
 
-    # 🔥 AI GENERATOR (PAKAI GPT-OSS-120B)
+    # 🔥 AI GENERATOR (PAKAI LLAMA 3.3 70B)
     async def generate_word_from_ai(self, lang, difficulty):
         def fetch():
             try:
@@ -265,7 +265,7 @@ class Katla(commands.Cog):
                         prompt = "Generate a rare or obscure 5-letter English word. Reply with ONLY the word. Example: XYLYL"
 
                 res = client.chat.completions.create(
-                    model="openai/gpt-oss-120b", # 🔥 GANTI KE GPT-OSS 120B
+                    model="llama-3.3-70b-versatile",
                     messages=[{"role": "user", "content": prompt}],
                     temperature=1.0, 
                     max_tokens=20
@@ -276,7 +276,7 @@ class Katla(commands.Cog):
                 return None
 
         try:
-            return await asyncio.wait_for(asyncio.to_thread(fetch), timeout=15.0) # Timeout 15 detik karena 120B agak lama
+            return await asyncio.wait_for(asyncio.to_thread(fetch), timeout=15.0)
         except asyncio.TimeoutError:
             return None
 
