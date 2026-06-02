@@ -4,23 +4,15 @@ from discord import app_commands
 import asyncio
 import re
 import os
-import random
 import google.generativeai as genai
 
 # ================= SETUP AI (GOOGLE GEMINI) =================
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 gemini_model = genai.GenerativeModel('gemini-1.5-flash')
-# ==========================================================
 
-# 🔥 FALLBACK KATA DARURAT (HANYA KALAU AI MATI TOTAL)
-FALLBACK_WORDS = {
-    "id_easy": ["SABUN|Alat pembersih badan", "BAJAK|Alat menggarap sawah", "KAPAL|Kendaraan laut", "RAJIN|Suka bekerja keras", "LAPAR|Ingin makan", "NASI|Makanan pokok", "ROTI|Makanan dari terigu", "PAYUNG|Pelindung dari hujan", "SATE|Makanan tusuk", "GIGI|Ada di mulut"],
-    "id_normal": ["KAWAN", "GATAL", "TALAN", "PAPAN", "LEBIH", "SADAR", "TAKUT", "RAMAI", "BERAT", "DAPAT", "KAKAK", "GURAU", "JEMUR", "MAKAN", "LALAT", "JARAK", "CAMAR", "RAKAT"],
-    "id_hard": ["ADZAN", "FIRAS", "GYMNA", "QURBI", "XYLOT", "ZAHID", "KHALQ", "SYURA", "WUQUF", "HAJIJ", "MAQAM", "QADHA", "ZABUR", "KAFARA"],
-    "en_easy": ["APPLE|A red fruit", "BEACH|Sandy shore", "CHAIR|You sit on it", "DANCE|Move to music", "EAGLE|A big bird", "FLAME|Fire", "GRAPE|Purple fruit", "HOUSE|Where you live", "IMAGE|A picture", "JUICE|A drink"],
-    "en_normal": ["BRAVE", "CRANE", "FLAME", "GRAPE", "STORM", "WORLD", "QUEST", "PIXEL", "JOINT", "KNEEL", "LYING", "MOOSE", "OZONE", "PLUMB"],
-    "en_hard": ["XYLYL", "PYGMY", "QAJAQ", "ZYMES", "JINXS", "KYACK", "VIVID", "WALTZ", "QUAFF", "PLEXI", "LYMPH", "KAYOS", "HYPHY"]
-}
+# Kunci untuk queue (tanpa fallback words)
+VALID_KEYS = ["id_easy", "id_normal", "id_hard", "en_easy", "en_normal", "en_hard"]
+# ==========================================================
 
 # =========================
 # GAME LOGIC
@@ -192,11 +184,17 @@ class DifficultyView(discord.ui.View):
         await self.start_game(interaction, "hard")
 
     async def start_game(self, interaction, difficulty):
-        # Defer biar gak timeout kalau AI lama nyari katanya
         await interaction.response.defer()
         
         try:
             word_data = await self.cog.get_word_from_queue(self.lang, difficulty)
+            
+            if not word_data:
+                return await interaction.edit_original_response(
+                    content="❌ **AI Gagal!** Server AI sedang down atau API Key belum di-set. Coba lagi nanti.", 
+                    embed=None
+                )
+
             game = KatlaGame(interaction.user.id, self.lang, difficulty, word_data)
             self.cog.active_games[interaction.user.id] = game
 
@@ -228,16 +226,15 @@ class Katla(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.active_games = {}
-        # Queue murni kosong di awal, gak diisi fallback!
-        self.word_queues = {key: [] for key in FALLBACK_WORDS.keys()}
+        self.word_queues = {key: [] for key in VALID_KEYS}
 
         self.background_populate_words.start()
 
-    @tasks.loop(minutes=5) # Diubah jadi 5 menit biar queue cepat keisi AI
+    @tasks.loop(minutes=5)
     async def background_populate_words(self):
         max_queue_size = 3
 
-        for key in FALLBACK_WORDS.keys():
+        for key in VALID_KEYS:
             if len(self.word_queues[key]) < max_queue_size:
                 lang, diff = key.split("_")
                 word = await self.generate_word_from_ai(lang, diff)
@@ -254,14 +251,14 @@ class Katla(commands.Cog):
         key = f"{lang}_{difficulty}"
 
         # 1. Coba ambil dari antrian (Kalau ada stok AI)
-        if self.word_queues[key]:
+        while self.word_queues[key]:
             word_data = self.word_queues[key].pop(0)
             clean_word = re.sub(r'[^A-Z]', '', word_data.upper().split("|")[0])
             if len(clean_word) == 5:
                 print(f"[Katla] Using word from AI Queue.")
                 return word_data
             else:
-                print(f"[Katla] Invalid word from AI Queue: {word_data}.")
+                print(f"[Katla] Invalid word from AI Queue: {word_data}. Discarding.")
 
         # 2. Kalau antrian kosong, GENERATE LANGSUNG PAKAI AI (ON-THE-FLY)
         print(f"[Katla] Queue empty for {key}, generating on the fly...")
@@ -275,9 +272,9 @@ class Katla(commands.Cog):
             else:
                 print(f"[Katla] Invalid word from On-The-Fly AI: {word_data}.")
 
-        # 3. Kalau AI down / API key gak ada, baru pakai Fallback darurat
-        print(f"[Katla] AI failed! Using FALLBACK for {key}.")
-        return random.choice(FALLBACK_WORDS.get(key, ["KAWAN|Teman", "BRAVE|Brave"]))
+        # 3. AI down / gagal total, kembalikan None
+        print(f"[Katla] AI failed completely for {key}.")
+        return None
 
     # 🔥 AI GENERATOR (PAKAI GOOGLE GEMINI FLASH)
     async def generate_word_from_ai(self, lang, difficulty):
