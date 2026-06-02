@@ -9,7 +9,7 @@ from openai import OpenAI
 
 # ================= SETUP AI (OPENROUTER - FREE) =================
 client = OpenAI(
-    api_key=os.getenv("OPENROUTER_API_KEY"),
+    api_key=os.getenv("OPENROUTER_API_KEY_2"),
     base_url="https://openrouter.ai/api/v1"
 )
 # ==========================================================
