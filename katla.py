@@ -7,12 +7,12 @@ import os
 import random
 from openai import OpenAI
 
-# ================= SETUP AI =================
+# ================= SETUP AI (GROQ) =================
 client = OpenAI(
-    api_key=os.getenv("OPENROUTER_API_KEY"),
-    base_url="https://api.openai.com/v1" # Balikin ke default OpenRouter
+    api_key=os.getenv("GROQ_API_KEY"),
+    base_url="https://api.groq.com/openai/v1"
 )
-# ============================================
+# ==========================================================
 
 # 🔥 FALLBACK KATA DARURAT
 FALLBACK_WORDS = {
@@ -183,10 +183,9 @@ class DifficultyView(discord.ui.View):
         await self.start_game(interaction, "hard")
 
     async def start_game(self, interaction, difficulty):
-        # 🔥 AMBIL KATA DARI QUEUE (INSTAN!)
         word_data = self.cog.get_word_from_queue(self.lang, difficulty)
         
-        game = KatlaGame(interaction.user.id, self.lang, difficulty, word_data)
+        game = KatlaGame(interaction.user_id, self.lang, difficulty, word_data)
         self.cog.active_games[interaction.user_id] = game
 
         embed, view = self.cog.create_game_embed(game)
@@ -214,21 +213,15 @@ class Katla(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.active_games = {}
-        
-        # 🔥 QUEUE SYSTEM (SIM PAN KATA DI MEMORI)
         self.word_queues = {key: [] for key in FALLBACK_WORDS.keys()}
         
-        # Isi awal dari fallback biar langsung bisa main
         for key, words in FALLBACK_WORDS.items():
             self.word_queues[key].extend(words[:3])
             
-        # Mulai background task
         self.background_populate_words.start()
 
-    # 🔥 BACKGROUND TASK: ISI QUEUE TIAP 30 MENIT
     @tasks.loop(minutes=30)
     async def background_populate_words(self):
-        # Jangan over-queue, 5 kata per kategori udah cukup
         max_queue_size = 5
         
         for key in FALLBACK_WORDS.keys():
@@ -244,18 +237,15 @@ class Katla(commands.Cog):
         await self.bot.wait_until_ready()
         print("[Katla] Background word generator started!")
 
-    # 🔥 AMBIL KATA DARI QUEUE (INSTAN TANPA NUNGGU AI)
     def get_word_from_queue(self, lang, difficulty):
         key = f"{lang}_{difficulty}"
         
-        # Kalau queue ada isinya, ambil dari depan (FIFO)
         if self.word_queues[key]:
             return self.word_queues[key].pop(0)
         
-        # Kalau queue kosong, pakai fallback
         return random.choice(FALLBACK_WORDS.get(key, ["KAWAN|Teman", "BRAVE|Brave"]))
 
-    # 🔥 AI GENERATOR (DIPANGGIL DI BELAKANG LAYAR)
+    # 🔥 AI GENERATOR (PAKAI GPT-OSS-120B)
     async def generate_word_from_ai(self, lang, difficulty):
         def fetch():
             try:
@@ -264,22 +254,21 @@ class Katla(commands.Cog):
                         prompt = "Generate a common 5-letter Indonesian word and a short clue. Format exactly like this: WORD|Clue. Example: SABUN|Alat pembersih badan. Reply with ONLY the format."
                     elif difficulty == "normal":
                         prompt = "Generate a common 5-letter Indonesian word. Reply with ONLY the word. Example: KAWAN"
-                    else: # hard
+                    else: 
                         prompt = "Generate a rare or obscure 5-letter Indonesian word from KBBI. Reply with ONLY the word. Example: ADZAN"
-                else: # en
+                else: 
                     if difficulty == "easy":
                         prompt = "Generate a common 5-letter English word and a short clue. Format exactly like this: WORD|Clue. Example: APPLE|A red fruit. Reply with ONLY the format."
                     elif difficulty == "normal":
                         prompt = "Generate a common 5-letter English word. Reply with ONLY the word. Example: BRAVE"
-                    else: # hard
+                    else: 
                         prompt = "Generate a rare or obscure 5-letter English word. Reply with ONLY the word. Example: XYLYL"
 
                 res = client.chat.completions.create(
-                    model="google/gemma-2-9b-it:free", 
+                    model="openai/gpt-oss-120b", # 🔥 GANTI KE GPT-OSS 120B
                     messages=[{"role": "user", "content": prompt}],
                     temperature=1.0, 
-                    max_tokens=20,
-                    extra_headers={"HTTP-Referer": "https://discordbot.com", "X-Title": "Katla Game"}
+                    max_tokens=20
                 )
                 return res.choices[0].message.content.strip().upper()
             except Exception as e:
@@ -287,7 +276,7 @@ class Katla(commands.Cog):
                 return None
 
         try:
-            return await asyncio.wait_for(asyncio.to_thread(fetch), timeout=20.0)
+            return await asyncio.wait_for(asyncio.to_thread(fetch), timeout=15.0) # Timeout 15 detik karena 120B agak lama
         except asyncio.TimeoutError:
             return None
 
@@ -310,7 +299,7 @@ class Katla(commands.Cog):
 
     @app_commands.command(name="katla", description="Mainkan Katla (Wordle ID/EN) - AI Generated!")
     async def katla(self, interaction: discord.Interaction):
-        if interaction.user.id in self.active_games and not self.active_games[interaction.user.id].over:
+        if interaction.user.id in self.active_games and not self.active_games[interaction.user_id].over:
             return await interaction.response.send_message("❌ Masih ada game aktif!", ephemeral=True)
 
         embed = discord.Embed(title="🌍 Pilih Bahasa / Select Language", color=discord.Color.blue())
