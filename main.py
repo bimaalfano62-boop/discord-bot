@@ -42,7 +42,6 @@ class SelfBot(commands.Bot):
             command_prefix=config["prefix"],
             self_bot=True,
             help_command=None,
-            intents=discord.Intents.all()
         )
         self.afk = config["afk"]
         self.auto_reply = config["auto_reply"]
