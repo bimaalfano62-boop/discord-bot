@@ -1,0 +1,28 @@
+{
+  "prefix": ".",
+  "ai": {
+    "enabled": true,
+    "model": "llama3-8b-8192",
+    "system_prompt": "You are a helpful, witty, and concise assistant. Reply using casual English slang.",
+    "reply_on_mention": true
+  },
+  "afk": {
+    "enabled": false,
+    "message": "I'm currently AFK"
+  },
+  "auto_reply": {
+    "enabled": false,
+    "triggers": {
+      "hi": "Hello! 👋",
+      "sup": "Nothing much, you?"
+    }
+  },
+  "anti_delete": {
+    "enabled": false,
+    "channel_id": ""
+  },
+  "status": {
+    "text": "Selfbot Active",
+    "type": "listening"
+  }
+}
