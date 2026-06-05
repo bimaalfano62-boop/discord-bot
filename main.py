@@ -31,7 +31,7 @@ config = load_config()
 #         SETUP AI & SELFBOT
 # ============================================
 if not DISCORD_TOKEN:
-    print("❌ Discord Token not found in .env file!")
+    print("❌ Discord Token not found in .env or Railway Variables!")
     exit()
 
 ai_client = AsyncGroq(api_key=GROQ_KEY) if GROQ_KEY else None
@@ -42,6 +42,7 @@ class SelfBot(commands.Bot):
             command_prefix=config["prefix"],
             self_bot=True,
             help_command=None,
+            intents=discord.Intents.all() # Required for reading messages
         )
         self.afk = config["afk"]
         self.auto_reply = config["auto_reply"]
@@ -95,10 +96,10 @@ def embed_builder(title, description, color=0x00ff00):
 
 async def generate_ai_response(prompt):
     if not ai_client:
-        return "❌ Groq API Key is not set in the `.env` file."
+        return "❌ Groq API Key is not set in the `.env` or Variables."
     try:
         response = await ai_client.chat.completions.create(
-            model=bot.ai_cfg.get("model", "llama3-8b-8192"),
+            model=bot.ai_cfg.get("model", "llama-3.3-70b-versatile"),
             messages=[
                 {"role": "system", "content": bot.ai_cfg.get("system_prompt", "You are a helpful assistant.")},
                 {"role": "user", "content": prompt}
@@ -125,15 +126,21 @@ async def on_message(message):
         return
 
     mentioned = bot.user.mentioned_in(message)
+    is_dm = isinstance(message.channel, discord.DMChannel)
 
     # PRIORITY 1: AFK
-    if mentioned and bot.afk["enabled"]:
+    if mentioned and bot.afk["enabled"] and not is_dm:
         try: await message.reply(f"💤 I'm currently AFK: {bot.afk['message']}")
         except: pass
 
-    # PRIORITY 2: AI Reply (Groq)
-    elif mentioned and bot.ai_cfg.get("enabled", False) and bot.ai_cfg.get("reply_on_mention", True):
-        content = message.content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
+    # PRIORITY 2: AI Reply (Groq) - Works in DM automatically, needs mention in Server
+    should_reply_ai = (mentioned and not is_dm) or (is_dm and bot.ai_cfg.get("reply_on_mention", True))
+    
+    if bot.ai_cfg.get("enabled", False) and should_reply_ai:
+        content = message.content
+        if not is_dm:
+            content = content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
+        
         if content:
             async with message.channel.typing():
                 reply = await generate_ai_response(content)
@@ -178,7 +185,7 @@ async def on_message_delete(message):
             content = message.content or "*No text content*"
             if len(content) > 1024: content = content[:1021] + "..."
             em.add_field(name="Content", value=content, inline=False)
-            try: await log_channel.send(embed=em)
+            try: await log_channel.send(embeds=[em])
             except: pass
 
     # Snipe
@@ -236,7 +243,7 @@ async def help_cmd(ctx):
     }
     for cat, cmds in categories.items():
         em.add_field(name=cat, value="\n".join(cmds), inline=False)
-    await ctx.send(embed=em)
+    await ctx.send(embeds=[em])
 
 # ============================================
 #           COMMANDS - AI
@@ -274,7 +281,7 @@ async def aiconfig_cmd(ctx):
         f"**Model:** `{bot.ai_cfg['model']}`\n"
         f"**Reply on Mention:** {'✅' if bot.ai_cfg.get('reply_on_mention') else '❌'}\n"
         f"**System Prompt:** ```{bot.ai_cfg['system_prompt']}```")
-    await ctx.send(embed=em)
+    await ctx.send(embeds=[em])
 
 # ============================================
 #           COMMANDS - UTILITY
@@ -284,11 +291,12 @@ async def ping_cmd(ctx):
     start = time.perf_counter(); msg = await ctx.send("🏓 Pinging...")
     end = time.perf_counter(); latency = round((end - start) * 1000)
     em = embed_builder("🏓 Pong!", f"**Latency:** `{latency}ms`")
-    await msg.edit(content=None, embed=em)
+    await msg.edit(content=None, embeds=[em])
 
 @bot.command(name="uptime")
 async def uptime_cmd(ctx):
-    em = embed_builder("⏰ Uptime", f"`{get_uptime()}`"); await ctx.send(embed=em)
+    em = embed_builder("⏰ Uptime", f"`{get_uptime()}`")
+    await ctx.send(embeds=[em])
 
 @bot.command(name="userinfo", aliases=["ui"])
 async def userinfo_cmd(ctx, user: discord.User = None):
@@ -301,14 +309,14 @@ async def userinfo_cmd(ctx, user: discord.User = None):
         em.add_field(name="Joined", value=f"<t:{int(member.joined_at.timestamp())}:R>", inline=True)
         roles = [r.mention for r in member.roles[1:]] or ["None"]
         em.add_field(name=f"Roles [{len(roles)}]", value=" ".join(roles[:10]), inline=False)
-    await ctx.send(embed=em)
+    await ctx.send(embeds=[em])
 
 @bot.command(name="avatar", aliases=["av"])
 async def avatar_cmd(ctx, user: discord.User = None):
     user = user or ctx.author
     if not user.avatar: return await ctx.send("❌ User has no avatar!")
     em = embed_builder("🖼️ Avatar", f"[Download]({user.avatar.url})"); em.set_image(url=user.avatar.url)
-    await ctx.send(embed=em)
+    await ctx.send(embeds=[em])
 
 @bot.command(name="calc")
 async def calc_cmd(ctx, *, expression):
@@ -316,7 +324,7 @@ async def calc_cmd(ctx, *, expression):
         allowed = set("0123456789+-*/().% ")
         if not all(c in allowed for c in expression): return await ctx.send("❌ Invalid expression!")
         result = eval(expression)
-        await ctx.send(embed=embed_builder("🧮 Calculator", f"**Input:** `{expression}`\n**Output:** `{result}`"))
+        await ctx.send(embeds=[embed_builder("🧮 Calculator", f"**Input:** `{expression}`\n**Output:** `{result}`")])
     except Exception as e: await ctx.send(f"❌ Error: `{e}`")
 
 # ============================================
@@ -330,7 +338,7 @@ async def purge_cmd(ctx, amount: int = 10):
         if message.author.id == bot.user.id:
             if deleted >= amount: break
             await message.delete(); deleted += 1; await asyncio.sleep(0.5)
-    msg = await ctx.send(embed=embed_builder("🗑️ Purge", f"Successfully deleted `{deleted}` messages!"))
+    msg = await ctx.send(embeds=[embed_builder("🗑️ Purge", f"Successfully deleted `{deleted}` messages!")])
     await asyncio.sleep(3); await msg.delete()
 
 @bot.command(name="spam")
@@ -343,11 +351,11 @@ async def spam_cmd(ctx, amount: int = 5, *, text):
 @bot.command(name="embed")
 async def embed_cmd(ctx, *, text):
     em = embed_builder("💬 Embed Message", text, color=random.randint(0, 0xffffff))
-    await ctx.send(embed=em); await ctx.message.delete()
+    await ctx.send(embeds=[em]); await ctx.message.delete()
 
 @bot.command(name="dm")
 async def dm_cmd(ctx, user: discord.User, *, text):
-    try: await user.send(text); await ctx.send(embed=embed_builder("📬 DM Sent", f"To: **{user}**\nMessage: `{text}`"))
+    try: await user.send(text); await ctx.send(embeds=[embed_builder("📬 DM Sent", f"To: **{user}**\nMessage: `{text}`")])
     except discord.Forbidden: await ctx.send("❌ Cannot DM this user!")
 
 # ============================================
@@ -360,7 +368,7 @@ async def snipe_cmd(ctx):
     em = discord.Embed(title="🔍 Sniped!", description=data["content"] or "*No text content*", color=0xff9900, timestamp=data["time"])
     em.set_footer(text=f"{data['author']} • ID: {data['author'].id}")
     if data["attachments"]: em.set_image(url=data["attachments"][0].url)
-    await ctx.send(embed=em)
+    await ctx.send(embeds=[em])
 
 @bot.command(name="editsnipe", aliases=["esnipe"])
 async def editsnipe_cmd(ctx):
@@ -370,7 +378,7 @@ async def editsnipe_cmd(ctx):
     em.add_field(name="Before", value=data["before"] or "*Empty*", inline=False)
     em.add_field(name="After", value=data["after"] or "*Empty*", inline=False)
     em.set_footer(text=f"{data['author']} • ID: {data['author'].id}")
-    await ctx.send(embed=em)
+    await ctx.send(embeds=[em])
 
 @bot.command(name="afk")
 async def afk_cmd(ctx, *, action="on"):
@@ -385,7 +393,7 @@ async def afk_cmd(ctx, *, action="on"):
         bot.afk["enabled"] = True; bot.afk["message"] = action
         config["afk"]["enabled"] = True; config["afk"]["message"] = action; save_config(config)
         em = embed_builder("💤 AFK", f"AFK **enabled**\nMessage: `{action}`")
-    await ctx.send(embed=em)
+    await ctx.send(embeds=[em])
 
 @bot.command(name="autoreply")
 async def autoreply_cmd(ctx, action="on"):
@@ -396,7 +404,7 @@ async def autoreply_cmd(ctx, action="on"):
         bot.auto_reply["enabled"] = True; config["auto_reply"]["enabled"] = True; save_config(config)
         triggers = "\n".join([f"`{k}` → `{v}`" for k, v in bot.auto_reply.get("triggers", {}).items()]) or "Empty"
         em = embed_builder("💬 Auto Reply", f"Auto Reply **enabled**\n\n**Triggers:**\n{triggers}")
-    await ctx.send(embed=em)
+    await ctx.send(embeds=[em])
 
 @bot.command(name="addtrigger")
 async def addtrigger_cmd(ctx, *, text):
@@ -404,7 +412,7 @@ async def addtrigger_cmd(ctx, *, text):
     if len(parts) < 2: return await ctx.send("❌ Format: `addtrigger trigger|reply`")
     trigger, reply = parts[0].strip(), "|".join(parts[1:]).strip()
     bot.auto_reply.setdefault("triggers", {})[trigger] = reply; config["auto_reply"]["triggers"][trigger] = reply
-    save_config(config); await ctx.send(embed=embed_builder("✅ Trigger Added", f"`{trigger}` → `{reply}`"))
+    save_config(config); await ctx.send(embeds=[embed_builder("✅ Trigger Added", f"`{trigger}` → `{reply}`")])
 
 @bot.command(name="antidelete")
 async def antidelete_cmd(ctx, action="on", channel: discord.TextChannel = None):
@@ -415,7 +423,7 @@ async def antidelete_cmd(ctx, action="on", channel: discord.TextChannel = None):
         ch = channel or ctx.channel; bot.anti_delete["enabled"] = True; bot.anti_delete["channel_id"] = str(ch.id)
         config["anti_delete"]["enabled"] = True; config["anti_delete"]["channel_id"] = str(ch.id); save_config(config)
         em = embed_builder("🛡️ Anti Delete", f"Anti Delete **enabled**\nLog Channel: {ch.mention}")
-    await ctx.send(embed=em)
+    await ctx.send(embeds=[em])
 
 # ============================================
 #           COMMANDS - FUN
@@ -424,16 +432,16 @@ async def antidelete_cmd(ctx, action="on", channel: discord.TextChannel = None):
 async def eightball_cmd(ctx, *, question):
     responses = ["🟢 Definitely!", "🟢 Without a doubt!", "🟡 Most likely", "🟡 Try asking again", "🔴 Don't count on it!", "🔴 No way!"]
     em = embed_builder("🎱 Magic 8-Ball", f"**Question:** {question}\n**Answer:** {random.choice(responses)}")
-    await ctx.send(embed=em)
+    await ctx.send(embeds=[em])
 
 @bot.command(name="roll")
 async def roll_cmd(ctx, max_num: int = 6):
     em = embed_builder("🎲 Dice Roll", f"Rolling 1-{max_num}...\n🎯 **{random.randint(1, max_num)}**")
-    await ctx.send(embed=em)
+    await ctx.send(embeds=[em])
 
 @bot.command(name="coinflip", aliases=["cf"])
 async def coinflip_cmd(ctx):
-    await ctx.send(embed=embed_builder("Coin Flip", random.choice(["🪙 Heads!", "🪙 Tails!"])))
+    await ctx.send(embeds=[embed_builder("Coin Flip", random.choice(["🪙 Heads!", "🪙 Tails!"]))])
 
 @bot.command(name="rps")
 async def rps_cmd(ctx, choice):
@@ -447,14 +455,14 @@ async def rps_cmd(ctx, choice):
     elif (user_c == "rock" and bot_c == "scissors") or (user_c == "paper" and bot_c == "rock") or (user_c == "scissors" and bot_c == "paper"): res = "🟢 You Win!"
     else: res = "🔴 You Lose!"
     em = embed_builder("✊ RPS", f"**You:** {choices[user_c]} {user_c.title()}\n**Bot:** {choices[bot_c]} {bot_c.title()}\n\n{res}")
-    await ctx.send(embed=em)
+    await ctx.send(embeds=[em])
 
 @bot.command(name="gayrate")
 async def gayrate_cmd(ctx, user: discord.User = None):
     user = user or ctx.author; rate = random.randint(0, 100)
     bar = "█" * int(rate/10) + "░" * (10 - int(rate/10))
     label = "Straight 😤" if rate < 30 else "Curious 💅" if rate < 60 else "Fabulous 🏳️‍🌈" if rate < 90 else "ULTRA GAY 🌈✨"
-    await ctx.send(embed=embed_builder("🌈 Gay Rate", f"**{user}** is {rate}% gay!\n`[{bar}]` {label}"))
+    await ctx.send(embeds=[embed_builder("🌈 Gay Rate", f"**{user}** is {rate}% gay!\n`[{bar}]` {label}")])
 
 # ============================================
 #           COMMANDS - SETTINGS
@@ -462,7 +470,7 @@ async def gayrate_cmd(ctx, user: discord.User = None):
 @bot.command(name="setprefix")
 async def setprefix_cmd(ctx, new_prefix):
     config["prefix"] = new_prefix; bot.command_prefix = new_prefix; save_config(config)
-    await ctx.send(embed=embed_builder("⚙️ Prefix Changed", f"New prefix: `{new_prefix}`"))
+    await ctx.send(embeds=[embed_builder("⚙️ Prefix Changed", f"New prefix: `{new_prefix}`")])
 
 @bot.command(name="setstatus")
 async def setstatus_cmd(ctx, status_type, *, text):
@@ -474,7 +482,7 @@ async def setstatus_cmd(ctx, status_type, *, text):
     else: return await ctx.send("❌ Types: playing/listening/watching/clear")
     await bot.change_presence(activity=act)
     config["status"] = {"type": status_type, "text": text}; save_config(config)
-    await ctx.send(embed=embed_builder("⚙️ Status Changed", f"**Type:** {status_type}\n**Text:** {text}"))
+    await ctx.send(embeds=[embed_builder("⚙️ Status Changed", f"**Type:** {status_type}\n**Text:** {text}")])
 
 # ============================================
 #           ERROR HANDLER & RUN
@@ -488,5 +496,5 @@ async def on_command_error(ctx, error):
 if __name__ == "__main__":
     print("Starting All-In-One Selfbot (Groq AI)...")
     try: bot.run(DISCORD_TOKEN, log_handler=None)
-    except discord.LoginFailure: print("❌ Invalid Discord Token! Check your .env file.")
+    except discord.LoginFailure: print("❌ Invalid Discord Token! Check your Variables.")
     except Exception as e: print(f"❌ Error: {e}")
