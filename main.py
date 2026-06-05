@@ -31,19 +31,31 @@ config = load_config()
 #         SETUP AI & SELFBOT
 # ============================================
 if not DISCORD_TOKEN:
-    print("❌ Discord Token not found in .env or Railway Variables!")
+    print("❌ Discord Token not found!")
     exit()
 
 ai_client = AsyncGroq(api_key=GROQ_KEY) if GROQ_KEY else None
 
+# CEK VERSI LIBRARY (DEBUG)
+print(f"Discord Library Version: {discord.__version__}")
+
 class SelfBot(commands.Bot):
     def __init__(self):
-        super().__init__(
-            command_prefix=config["prefix"],
-            self_bot=True,
-            help_command=None,
-            intents=discord.Intents.all() # Required for reading messages
-        )
+        # Kode Anti-Error: Cek apakah Intents ada, kalau tidak ada pakai cara lama
+        if hasattr(discord, 'Intents'):
+            super().__init__(
+                command_prefix=config["prefix"],
+                self_bot=True,
+                help_command=None,
+                intents=discord.Intents.all()
+            )
+        else:
+            super().__init__(
+                command_prefix=config["prefix"],
+                self_bot=True,
+                help_command=None
+            )
+            
         self.afk = config["afk"]
         self.auto_reply = config["auto_reply"]
         self.anti_delete = config["anti_delete"]
@@ -78,6 +90,8 @@ class SelfBot(commands.Bot):
             await self.change_presence(activity=act)
 
 bot = SelfBot()
+
+# ... (Sisa kode fungsi AI, on_message, dan commands di bawahnya tetap pakai kode sebelumnya, JANGAN DIHAPUS) ...
 
 # ============================================
 #           UTILITY & AI FUNCTIONS
