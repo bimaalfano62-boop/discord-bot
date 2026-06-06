@@ -43,8 +43,9 @@ intents.members = True
 
 class AIBot(commands.Bot):
     def __init__(self):
+        default_prefix = config.get("prefix", "!")
         super().__init__(
-            command_prefix=config["prefix"],
+            command_prefix=[default_prefix, ","],
             intents=intents,
             help_command=None
         )
@@ -65,10 +66,11 @@ class AIBot(commands.Bot):
 ║  Bot   : {self.user.name:<22}║
 ║  ID    : {self.user.id:<22}║
 ║  Guilds: {len(self.guilds):<22}║
+║  Prefix: ! and ,                ║
 ║  AI    : {'✅ Groq Active' if self.ai_cfg.get('enabled') and ai_client else '❌ Off':<22}║
 ╚══════════════════════════════════╝
         """)
-        await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name=f"{config['prefix']}help"))
+        await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="!help or ,help"))
 
 bot = AIBot()
 
@@ -193,43 +195,46 @@ async def on_message_delete(message):
 # ============================================
 @bot.command(name="help")
 async def help_cmd(ctx):
-    em = embed_builder("📖 Bot Commands", f"Prefix: `{config['prefix']}`")
+    p = ctx.prefix
+    em = embed_builder("📖 Bot Commands", f"Prefix: `{p}` (Also works with `!` and `,`)")
     categories = {
         "🤖 AI (Groq)": [
-            f"`{config['prefix']}ask <question>` - Ask AI manually",
-            f"`{config['prefix']}aimodel <model>` - Change AI Model",
-            f"`{config['prefix']}aitoggle <on/off>` - Toggle AI auto-reply",
-            f"`{config['prefix']}aiprompt <text>` - Change AI personality",
-            f"`{config['prefix']}aiconfig` - View current AI settings",
+            f"`{p}ask <question>` - Ask AI manually",
+            f"`{p}aimodel <model>` - Change AI Model",
+            f"`{p}aitoggle <on/off>` - Toggle AI auto-reply",
+            f"`{p}aiprompt <text>` - Change AI personality",
+            f"`{p}aiconfig` - View current AI settings",
         ],
         "🛠️ Utility": [
-            f"`{config['prefix']}ping` - Check latency",
-            f"`{config['prefix']}uptime` - Check uptime",
-            f"`{config['prefix']}userinfo [user]` - User info",
-            f"`{config['prefix']}avatar [user]` - Get avatar",
+            f"`{p}ping` - Check latency",
+            f"`{p}uptime` - Check uptime",
+            f"`{p}userinfo [user]` - User info",
+            f"`{p}avatar [user]` - Get avatar",
+            f"`{p}about` - Bot information",
         ],
         "💬 Moderation": [
-            f"`{config['prefix']}purge <amount>` - Delete messages",
-            f"`{config['prefix']}embed <text>` - Send embed message",
+            f"`{p}purge <amount>` - Delete messages",
+            f"`{p}embed <text>` - Send embed message",
+        ],
+        "🔥 Roast & Fun": [
+            f"`{p}roast [user]` - 🔥 Savage & Toxic AI Roast",
+            f"`{p}8ball <question>` - Magic 8ball",
+            f"`{p}roll [max]` - Roll dice",
+            f"`{p}coinflip` - Coin flip",
+            f"`{p}rps <choice>` - Rock paper scissors",
+            f"`{p}gayrate [user]` - Gay rate",
         ],
         "🔍 Snipe & Auto": [
-            f"`{config['prefix']}snipe` - View deleted messages",
-            f"`{config['prefix']}editsnipe` - View edited messages",
-            f"`{config['prefix']}afk <on/off/msg>` - Toggle Bot AFK",
-            f"`{config['prefix']}autoreply <on/off>` - Toggle keyword reply",
-            f"`{config['prefix']}addtrigger <t>|<r>` - Add trigger",
-            f"`{config['prefix']}antidelete <on/off> [ch]` - Log deleted messages",
-        ],
-        "🎮 Fun": [
-            f"`{config['prefix']}8ball <question>` - Magic 8ball",
-            f"`{config['prefix']}roll [max]` - Roll dice",
-            f"`{config['prefix']}coinflip` - Coin flip",
-            f"`{config['prefix']}rps <choice>` - Rock paper scissors",
-            f"`{config['prefix']}gayrate [user]` - Gay rate",
+            f"`{p}snipe` - View deleted messages",
+            f"`{p}editsnipe` - View edited messages",
+            f"`{p}afk <on/off/msg>` - Toggle Bot AFK",
+            f"`{p}autoreply <on/off>` - Toggle keyword reply",
+            f"`{p}addtrigger <t>|<r>` - Add trigger",
+            f"`{p}antidelete <on/off> [ch]` - Log deleted messages",
         ],
         "⚙️ Settings": [
-            f"`{config['prefix']}setprefix <prefix>` - Change prefix",
-            f"`{config['prefix']}setstatus <type> <text>` - Change status",
+            f"`{p}setprefix <prefix>` - Change primary prefix",
+            f"`{p}setstatus <type> <text>` - Change status",
         ],
     }
     for cat, cmds in categories.items():
@@ -287,6 +292,20 @@ async def ping_cmd(ctx):
 @bot.command(name="uptime")
 async def uptime_cmd(ctx):
     await ctx.send(embed=embed_builder("⏰ Uptime", f"`{get_uptime()}`"))
+
+@bot.command(name="about", aliases=["botinfo"])
+async def about_cmd(ctx):
+    em = discord.Embed(
+        title="🤖 AI Groq Bot Information",
+        description="An all-in-one AI-powered Discord Bot using ultra-fast Groq API. Smart, witty, and fully customizable!",
+        color=0x5865F2, timestamp=datetime.now()
+    )
+    em.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else "")
+    em.add_field(name="🧠 AI Engine", value="Groq (Llama 3 / Mixtral)", inline=True)
+    em.add_field(name="🏠 Servers", value=f"{len(bot.guilds)}", inline=True)
+    em.add_field(name="👥 Users", value=f"{len(bot.users)}", inline=True)
+    em.add_field(name="✨ Key Features", value="• 🤖 Smart AI Chat\n• 🔥 Savage AI Roasts\n• 🔍 Snipe & Edit Snipe\n• 🛡️ Anti-Delete Logger\n• 💬 Custom Triggers", inline=False)
+    await ctx.send(embed=em)
 
 @bot.command(name="userinfo", aliases=["ui"])
 async def userinfo_cmd(ctx, user: discord.Member = None):
@@ -390,7 +409,46 @@ async def antidelete_cmd(ctx, action="on", channel: discord.TextChannel = None):
         em = embed_builder("🛡️ Anti Delete", f"Anti Delete **enabled**\nLog Channel: {ch.mention}")
     await ctx.send(embed=em)
 
-# --- COMMANDS FUN ---
+# --- COMMANDS FUN & ROAST ---
+@bot.command(name="roast")
+async def roast_cmd(ctx, user: discord.Member = None):
+    target = user or ctx.author
+    
+    # Kalau yang di-roast botnya sendiri
+    if target.id == bot.user.id:
+        return await ctx.send("Nice try, buddy. I'm the one holding the matches here. 🔥")
+
+    if not ai_client:
+        return await ctx.send("❌ Groq AI is not set up. Cannot roast.")
+
+    async with ctx.typing():
+        await asyncio.sleep(random.uniform(1.5, 3.0)) # Delay biar keliatan lagi mikir racunnya
+        try:
+            # Khusus Roast: System prompt diset menjadi super toxic dan menyebalkan
+            response = await ai_client.chat.completions.create(
+                model=bot.ai_cfg.get("model", "llama-3.3-70b-versatile"),
+                messages=[
+                    {"role": "system", "content": "You are an extremely toxic, ruthless, and savage internet troll. Your job is to roast the user brutally. Be harsh, insulting, sarcastic, and unforgiving. Use profanity (like fuck, shit, idiot, stupid) to make the roast hit harder. Make it personal based on their name. No holding back, give the most savage roast possible."},
+                    {"role": "user", "content": f"Roast this person named {target.display_name}."}
+                ],
+                max_tokens=250,
+                temperature=1.0 # Temperature tinggi biar makin gila dan kreatif racunnya
+            )
+            roast_text = response.choices[0].message.content
+            
+            em = discord.Embed(
+                title=f"🔥 Savage Roast for {target.display_name} 🔥", 
+                description=roast_text, 
+                color=0xFF0000,
+                timestamp=datetime.now()
+            )
+            em.set_footer(text=f"Requested by {ctx.author.display_name} | Don't take this seriously 😈")
+            
+            await ctx.send(target.mention, embed=em)
+            
+        except Exception as e:
+            await ctx.send(f"❌ Failed to generate roast: `{e}`")
+
 @bot.command(name="8ball")
 async def eightball_cmd(ctx, *, question):
     responses = ["🟢 Definitely!", "🟢 Without a doubt!", "🟡 Most likely", "🟡 Try asking again", "🔴 Don't count on it!", "🔴 No way!"]
@@ -428,8 +486,10 @@ async def gayrate_cmd(ctx, user: discord.Member = None):
 @bot.command(name="setprefix")
 @commands.has_permissions(administrator=True)
 async def setprefix_cmd(ctx, new_prefix):
-    config["prefix"] = new_prefix; bot.command_prefix = new_prefix; save_config(config)
-    await ctx.send(embed=embed_builder("⚙️ Prefix Changed", f"New prefix: `{new_prefix}`"))
+    bot.command_prefix = [new_prefix, ","]
+    config["prefix"] = new_prefix
+    save_config(config)
+    await ctx.send(embed=embed_builder("⚙️ Prefix Changed", f"Primary prefix set to: `{new_prefix}`\n(Note: `,` will still work)"))
 
 @bot.command(name="setstatus")
 @commands.has_permissions(administrator=True)
@@ -450,7 +510,7 @@ async def setstatus_cmd(ctx, status_type, *, text):
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound): return
-    elif isinstance(error, commands.MissingRequiredArgument): await ctx.send(f"❌ Missing argument! Check `{config['prefix']}help`")
+    elif isinstance(error, commands.MissingRequiredArgument): await ctx.send(f"❌ Missing argument! Check `{ctx.prefix}help`")
     elif isinstance(error, commands.MissingPermissions): await ctx.send("❌ You don't have permission to use this command!")
     else: await ctx.send(f"❌ Error: `{error}`")
 
