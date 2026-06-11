@@ -1,21 +1,22 @@
 import discord
-import chess
+import chess as chess_lib # GANTI NAMA: dari 'chess' jadi 'chess_lib' biar nggak bentrok
 import aiohttp
 import asyncio
+import os
 from discord.ext import commands
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 
-# Coba import Stockfish, kalau gagolkin artinya engine belum diinstall
+# Coba import library stockfish
 try:
     from stockfish import Stockfish
-    STOCKFISH_AVAILABLE = True
+    STOCKFISH_PY_INSTALLED = True
 except ImportError:
-    STOCKFISH_AVAILABLE = False
+    STOCKFISH_PY_INSTALLED = False
 
 class ChessGame:
     def __init__(self, white: discord.Member, black: discord.Member, is_bot_game=False, engine=None):
-        self.board = chess.Board()
+        self.board = chess_lib.Board() # Pakai chess_lib
         self.white = white
         self.black = black
         self.is_bot_game = is_bot_game
@@ -29,7 +30,7 @@ class ChessGame:
             final_str += f"{8 - i} {row} {8 - i}\n"
         final_str += "  a b c d e f g h\n"
         
-        turn = "⚪ White" if self.board.turn == chess.WHITE else "⚫ Black"
+        turn = "⚪ White" if self.board.turn == chess_lib.WHITE else "⚫ Black"
         return f"```{final_str}```\n**Turn:** {turn}"
 
     def make_move(self, move_str):
@@ -44,9 +45,18 @@ class Chess(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.games = {}
-        # Thread pool buat jalanin Stockfish biar bot Discord nggak freeze saat mikir
         self.executor = ThreadPoolExecutor(max_workers=2)
-        self.stockfish_path = "stockfish" # Default path di Linux/Mac/Railway. Kalau Windows ganti jadi "stockfish.exe"
+        self.stockfish_path = "stockfish" # Di Railway udah ke-install lewat Procfile
+        
+        self.stockfish_available = False
+        if STOCKFISH_PY_INSTALLED:
+            try:
+                test_engine = Stockfish(path=self.stockfish_path, depth=1)
+                self.stockfish_available = True
+                print("✅ Stockfish engine found and working!")
+            except Exception as e:
+                print(f"⚠️ Stockfish executable not found: {e}")
+                self.stockfish_available = False
 
     def embed_builder(self, title, description, color=0x00ff00):
         em = discord.Embed(title=title, description=description, color=color, timestamp=datetime.now())
@@ -54,30 +64,25 @@ class Chess(commands.Cog):
         return em
 
     def get_stockfish_engine(self, elo=1350):
-        if not STOCKFISH_AVAILABLE:
-            return None
+        if not self.stockfish_available: return None
         try:
-            # Inisialisasi Stockfish dengan ELO spesifik
-            engine = Stockfish(path=self.stockfish_path)
+            engine = Stockfish(path=self.stockfish_path, depth=10)
             engine.set_elo_rating(elo)
             return engine
-        except Exception as e:
-            print(f"[CHESS ERROR] Stockfish init failed: {e}")
-            return None
+        except: return None
 
     # ============================================
     #           COMMANDS
     # ============================================
     @commands.group(name="chess", invoke_without_command=True)
-    async def chess_cmd(self, ctx):
+    async def chess(self, ctx): # Nama function jadi 'chess', jadi @chess.command() bener
+        pve_status = "✅ Available" if self.stockfish_available else "❌ Stockfish not installed"
         em = self.embed_builder("♟️ Chess Commands", "Play chess directly in Discord!")
         p = ctx.prefix
-        pve_status = "✅ Available" if STOCKFISH_AVAILABLE else "❌ Stockfish not installed"
-        
-        em.add_field(name="Player vs Player", value=f"`{p}chess start @user` - Start PvP game", inline=False)
-        em.add_field(name=f"Player vs Bot ({pve_status})", value=f"`{p}chess play [elo]` - Play vs Bot (Default ELO: 1350)\n`{p}chess setelo <elo>` - Change Bot ELO mid-game", inline=False)
-        em.add_field(name="Game Controls", value=f"`{p}chess move <e2e4>` - Make a move\n`{p}chess board` - View board\n`{p}chess resign` - Resign", inline=False)
-        em.add_field(name="Fun", value=f"`{p}chess puzzle` - Get daily Lichess puzzle", inline=False)
+        em.add_field(name="Player vs Player", value=f"`{p}chess start @user`", inline=False)
+        em.add_field(name=f"Player vs Bot ({pve_status})", value=f"`{p}chess play [elo]` - Default ELO: 1350\n`{p}chess setelo <elo>`", inline=False)
+        em.add_field(name="Controls", value=f"`{p}chess move <e2e4>`\n`{p}chess board`\n`{p}chess resign`", inline=False)
+        em.add_field(name="Fun", value=f"`{p}chess puzzle` - Daily Lichess puzzle", inline=False)
         await ctx.send(embed=em)
 
     # ============================================
@@ -85,49 +90,41 @@ class Chess(commands.Cog):
     # ============================================
     @chess.command(name="start")
     async def start_pvp(self, ctx, opponent: discord.Member):
-        if ctx.channel.id in self.games:
-            return await ctx.send("❌ Game already running here! Finish or resign first.")
-        if opponent.id == ctx.author.id:
-            return await ctx.send("❌ You can't play against yourself!")
-        if opponent.id == self.bot.user.id:
-            return await ctx.send("❌ Use `.chess play` to play against the Bot!")
+        if ctx.channel.id in self.games: return await ctx.send("❌ Game already running here!")
+        if opponent.id == ctx.author.id: return await ctx.send("❌ You can't play against yourself!")
+        if opponent.id == self.bot.user.id: return await ctx.send("❌ Use `.chess play` to play against the Bot!")
         
         game = ChessGame(white=ctx.author, black=opponent)
         self.games[ctx.channel.id] = game
         
-        em = self.embed_builder("♟️ PvP Game Started!", f"**⚪ White:** {ctx.author.mention}\n**⚫ Black:** {opponent.mention}\n\nWhite moves first!")
+        em = self.embed_builder("♟️ PvP Game Started!", f"**⚪ White:** {ctx.author.mention}\n**⚫ Black:** {opponent.mention}")
         em.add_field(name="Board", value=game.get_board_text(), inline=False)
         await ctx.send(opponent.mention, embed=em)
 
     # ============================================
-    #           PLAYER VS BOT (ELO SYSTEM)
+    #           PLAYER VS BOT
     # ============================================
     @chess.command(name="play")
     async def start_pve(self, ctx, elo: int = 1350):
-        if not STOCKFISH_AVAILABLE:
-            return await ctx.send("❌ Stockfish engine is not installed on the server!")
-        if ctx.channel.id in self.games:
-            return await ctx.send("❌ Game already running here! Finish or resign first.")
+        if not self.stockfish_available:
+            return await ctx.send("❌ Stockfish engine is not installed! PvP only.")
+        if ctx.channel.id in self.games: return await ctx.send("❌ Game already running here!")
         
-        elo = max(100, min(3200, elo)) # Batas ELO 100 - 3200
+        elo = max(100, min(3200, elo))
         engine = self.get_stockfish_engine(elo)
-        if not engine:
-            return await ctx.send("❌ Failed to initialize Stockfish engine.")
+        if not engine: return await ctx.send("❌ Failed to start engine.")
 
-        # User selalu Putih, Bot selalu Hitam
         game = ChessGame(white=ctx.author, black=self.bot.user, is_bot_game=True, engine=engine)
         self.games[ctx.channel.id] = game
         
-        em = self.embed_builder("🤖 PvE Game Started!", f"**⚪ White (You):** {ctx.author.mention}\n**⚫ Black (Bot):** {self.bot.user.mention}\n**Bot ELO:** {elo}\n\nMake your move!")
+        em = self.embed_builder("🤖 PvE Game Started!", f"**⚪ White (You):** {ctx.author.mention}\n**⚫ Black (Bot):** {self.bot.user.mention}\n**Bot ELO:** {elo}")
         em.add_field(name="Board", value=game.get_board_text(), inline=False)
         await ctx.send(embed=em)
 
     @chess.command(name="setelo")
     async def set_elo(self, ctx, elo: int):
         game = self.games.get(ctx.channel.id)
-        if not game or not game.is_bot_game:
-            return await ctx.send("❌ No Bot game active here.")
-        
+        if not game or not game.is_bot_game: return await ctx.send("❌ No Bot game active here.")
         elo = max(100, min(3200, elo))
         game.engine.set_elo_rating(elo)
         await ctx.send(embed=self.embed_builder("⚙️ ELO Changed", f"Bot ELO set to **{elo}**"))
@@ -138,27 +135,23 @@ class Chess(commands.Cog):
     @chess.command(name="move")
     async def make_move(self, ctx, *, move_str):
         game = self.games.get(ctx.channel.id)
-        if not game:
-            return await ctx.send("❌ No active game here.")
+        if not game: return await ctx.send("❌ No active game here.")
 
-        # Cek giliran
-        if game.board.turn == chess.WHITE and ctx.author.id != game.white.id:
+        if game.board.turn == chess_lib.WHITE and ctx.author.id != game.white.id:
             return await ctx.send(f"❌ It's {game.white.mention}'s turn!")
-        if game.board.turn == chess.BLACK and ctx.author.id != game.black.id and not game.is_bot_game:
+        if game.board.turn == chess_lib.BLACK and ctx.author.id != game.black.id and not game.is_bot_game:
             return await ctx.send(f"❌ It's {game.black.mention}'s turn!")
 
         success, error = game.make_move(move_str)
-        if not success:
-            return await ctx.send(f"❌ Invalid move! Reason: `{error}`")
+        if not success: return await ctx.send(f"❌ Invalid move! Reason: `{error}`")
 
         result = ""
         if game.board.is_checkmate():
-            winner = game.white if game.board.turn == chess.BLACK else game.black
+            winner = game.white if game.board.turn == chess_lib.BLACK else game.black
             result = f"🏆 **Checkmate! {winner.mention} wins!**"
             del self.games[ctx.channel.id]
         elif game.board.is_stalemate():
-            result = "🤝 **Stalemate! Draw.**"
-            del self.games[ctx.channel.id]
+            result = "🤝 **Stalemate! Draw.**"; del self.games[ctx.channel.id]
         elif game.board.is_check():
             result = "⚠️ **Check!**"
 
@@ -169,37 +162,30 @@ class Chess(commands.Cog):
         # ============================================
         # BOT TURN (STOCKFISH ENGINE)
         # ============================================
-        if game.is_bot_game and game.board.turn == chess.BLACK and not game.board.is_game_over():
-            await ctx.send("🤖 **Bot is thinking...**")
-            
-            # Jalankan Stockfish di thread terpisah biar bot Discord nggak mati
+        if game.is_bot_game and game.board.turn == chess_lib.BLACK and not game.board.is_game_over():
+            status_msg = await ctx.send("🤖 **Bot is thinking...**")
             loop = asyncio.get_event_loop()
             try:
-                # Set posisi papan ke Stockfish
                 game.engine.set_fen_position(game.board.fen())
-                # Minta Stockfish cari gerakan terbaik
                 best_move = await loop.run_in_executor(self.executor, game.engine.get_best_move)
                 
                 if best_move:
                     game.make_move(best_move)
-                    
                     result_bot = ""
                     if game.board.is_checkmate():
-                        result_bot = "🏆 **Checkmate! Bot wins!**"
-                        del self.games[ctx.channel.id]
+                        result_bot = "🏆 **Checkmate! Bot wins!**"; del self.games[ctx.channel.id]
                     elif game.board.is_stalemate():
-                        result_bot = "🤝 **Stalemate! Draw.**"
-                        del self.games[ctx.channel.id]
+                        result_bot = "🤝 **Stalemate! Draw.**"; del self.games[ctx.channel.id]
                     elif game.board.is_check():
                         result_bot = "⚠️ **Check!**"
 
                     em_bot = self.embed_builder("🤖 Bot Moved", f"**Move:** `{best_move}`\n{result_bot}")
                     em_bot.add_field(name="Board", value=game.get_board_text(), inline=False)
-                    await ctx.send(embed=em_bot)
+                    await status_msg.edit(content=None, embed=em_bot)
                 else:
-                    await ctx.send("❌ Bot couldn't find a move. Game might be over.")
+                    await status_msg.edit(content="❌ Bot couldn't find a move.")
             except Exception as e:
-                await ctx.send(f"❌ Engine Error: `{e}`")
+                await status_msg.edit(content=f"❌ Engine Error: `{e}`")
 
     @chess.command(name="board")
     async def show_board(self, ctx):
@@ -223,7 +209,7 @@ class Chess(commands.Cog):
         await ctx.send(embed=self.embed_builder("🏳️ Resigned", f"{ctx.author.mention} resigned. {winner_name} wins!"))
 
     # ============================================
-    #           DAILY PUZZLE (LICHESS API)
+    #           DAILY PUZZLE
     # ============================================
     @chess.command(name="puzzle")
     async def daily_puzzle(self, ctx):
@@ -234,16 +220,12 @@ class Chess(commands.Cog):
                 data = await resp.json()
 
         puzzle = data.get("puzzle", {})
-        puzzle_url = "https://lichess.org/training/daily"
-        rating = puzzle.get("glicko", {}).get("rating", "N/A")
-        
-        em = self.embed_builder("🧩 Daily Chess Puzzle", f"**Rating:** {rating}\n**Play it here:** [Lichess Daily Puzzle]({puzzle_url})")
+        em = self.embed_builder("🧩 Daily Chess Puzzle", f"**Rating:** {puzzle.get('glicko', {}).get('rating', 'N/A')}\n**Play:** [Lichess Daily](https://lichess.org/training/daily)")
         try:
             fen = puzzle.get("fen")
             if fen:
-                board = chess.Board(fen)
-                board_str = board.unicode(invert_color=True)
-                em.add_field(name="Position", value=f"```{board_str}```", inline=False)
+                board = chess_lib.Board(fen)
+                em.add_field(name="Position", value=f"```{board.unicode(invert_color=True)}```", inline=False)
         except: pass
         await ctx.send(embed=em)
 
