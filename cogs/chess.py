@@ -42,18 +42,26 @@ class ChessGame:
             return False, str(e)
 
 class Chess(commands.Cog):
-    def __init__(self, bot):
+        def __init__(self, bot):
         self.bot = bot
         self.games = {}
         self.executor = ThreadPoolExecutor(max_workers=2)
-        self.stockfish_path = "stockfish" # Di Railway udah ke-install lewat Procfile
+        
+        # DETEKSI LOKASI STOCKFISH
+        # Di Linux (Railway), apt-get naruh stockfish di /usr/games/
+        if os.path.exists("/usr/games/stockfish"):
+            self.stockfish_path = "/usr/games/stockfish"
+        elif os.name == 'nt':
+            self.stockfish_path = "stockfish.exe" # Buat Windows
+        else:
+            self.stockfish_path = "stockfish" # Buat Mac / Linux lokal biasa
         
         self.stockfish_available = False
         if STOCKFISH_PY_INSTALLED:
             try:
                 test_engine = Stockfish(path=self.stockfish_path, depth=1)
                 self.stockfish_available = True
-                print("✅ Stockfish engine found and working!")
+                print(f"✅ Stockfish engine found at {self.stockfish_path}!")
             except Exception as e:
                 print(f"⚠️ Stockfish executable not found: {e}")
                 self.stockfish_available = False
