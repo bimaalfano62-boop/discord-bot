@@ -1,5 +1,5 @@
 import discord
-import chess as chess_lib # GANTI NAMA: dari 'chess' jadi 'chess_lib' biar nggak bentrok
+import chess as chess_lib
 import aiohttp
 import asyncio
 import os
@@ -16,7 +16,7 @@ except ImportError:
 
 class ChessGame:
     def __init__(self, white: discord.Member, black: discord.Member, is_bot_game=False, engine=None):
-        self.board = chess_lib.Board() # Pakai chess_lib
+        self.board = chess_lib.Board()
         self.white = white
         self.black = black
         self.is_bot_game = is_bot_game
@@ -42,19 +42,18 @@ class ChessGame:
             return False, str(e)
 
 class Chess(commands.Cog):
-        def __init__(self, bot):
+    def __init__(self, bot):
         self.bot = bot
         self.games = {}
         self.executor = ThreadPoolExecutor(max_workers=2)
         
         # DETEKSI LOKASI STOCKFISH
-        # Di Linux (Railway), apt-get naruh stockfish di /usr/games/
         if os.path.exists("/usr/games/stockfish"):
-            self.stockfish_path = "/usr/games/stockfish"
+            self.stockfish_path = "/usr/games/stockfish" # Khusus Railway/Linux apt-get
         elif os.name == 'nt':
-            self.stockfish_path = "stockfish.exe" # Buat Windows
+            self.stockfish_path = "stockfish.exe" # Windows
         else:
-            self.stockfish_path = "stockfish" # Buat Mac / Linux lokal biasa
+            self.stockfish_path = "stockfish" # Mac / Linux biasa
         
         self.stockfish_available = False
         if STOCKFISH_PY_INSTALLED:
@@ -83,7 +82,7 @@ class Chess(commands.Cog):
     #           COMMANDS
     # ============================================
     @commands.group(name="chess", invoke_without_command=True)
-    async def chess(self, ctx): # Nama function jadi 'chess', jadi @chess.command() bener
+    async def chess(self, ctx):
         pve_status = "✅ Available" if self.stockfish_available else "❌ Stockfish not installed"
         em = self.embed_builder("♟️ Chess Commands", "Play chess directly in Discord!")
         p = ctx.prefix
