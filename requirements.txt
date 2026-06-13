@@ -4,3 +4,4 @@ python-dotenv
 python-chess
 aiohttp
 stockfish
+cairosvg
