@@ -13,6 +13,14 @@ try:
 except ImportError:
     STOCKFISH_PY_INSTALLED = False
 
+# Cek ketersediaan library gambar
+try:
+    import chess.svg
+    import cairosvg
+    IMAGE_MODE = True
+except ImportError:
+    IMAGE_MODE = False
+
 class ChessGame:
     def __init__(self, white: discord.Member, black: discord.Member, is_bot_game=False, engine=None):
         self.board = chess_lib.Board()
@@ -22,25 +30,51 @@ class ChessGame:
         self.engine = engine
 
     def get_board_text(self):
+        # Fallback teks jika library gambar tidak terinstall
         board_str = self.board.unicode(invert_color=False)
         rows = board_str.split('\n')
         final_str = "  a b c d e f g h\n"
         for i, row in enumerate(rows):
             final_str += f"{8 - i} {row} {8 - i}\n"
         final_str += "  a b c d e f g h\n"
-        
         turn = "⚪ White" if self.board.turn == chess_lib.WHITE else "⚫ Black"
         return f"```{final_str}```\n**Turn:** {turn}"
 
+    def get_board_image(self, channel_id):
+        if not IMAGE_MODE:
+            return None
+        
+        # Deteksi langkah terakhir (untuk diberi highlight kuning)
+        last_move = self.board.peek() if self.board.move_stack else None
+        
+        # Deteksi Skak (Raja akan diberi highlight merah)
+        check_sq = self.board.king(self.board.turn) if self.board.is_check() else None
+        
+        # Generate SVG menggunakan fitur bawaan python-chess
+        svg_data = chess.svg.board(
+            board=self.board, 
+            coordinates=True,      # Tampilkan angka & huruf
+            size=400,              # Ukuran gambar
+            lastmove=last_move,    # Highlight langkah terakhir
+            check=check_sq         # Highlight skak
+        )
+        
+        # Convert SVG ke PNG menggunakan cairosvg
+        png_data = cairosvg.svg2png(bytestring=svg_data)
+        file_path = f"board_{channel_id}.png"
+        
+        with open(file_path, "wb") as f:
+            f.write(png_data)
+            
+        return file_path
+
     def make_move(self, move_str):
         try:
-            # Coba baca SAN (e4, Nf3)
             move = self.board.parse_san(move_str)
             self.board.push(move)
             return True, None
         except ValueError:
             try:
-                # Kalau gagal, coba baca UCI (e2e4)
                 move = self.board.parse_uci(move_str)
                 self.board.push(move)
                 return True, None
@@ -75,13 +109,18 @@ class Chess(commands.Cog):
         em.set_footer(text=f"{self.bot.user.name}", icon_url=self.bot.user.avatar.url if self.bot.user.avatar else "")
         return em
 
-    def get_stockfish_engine(self, elo=1350):
-        if not self.stockfish_available: return None
-        try:
-            engine = Stockfish(path=self.stockfish_path, depth=10)
-            engine.set_elo_rating(elo)
-            return engine
-        except: return None
+    # Helper function untuk mengirim papan (gambar/teks)
+    async def send_board(self, ctx, title, description, game, content=None):
+        em = self.embed_builder(title, description)
+        board_path = game.get_board_image(ctx.channel.id)
+        
+        if board_path:
+            file = discord.File(board_path, filename=f"board_{ctx.channel.id}.png")
+            em.set_image(url=f"attachment://board_{ctx.channel.id}.png")
+            await ctx.send(content=content, embed=em, file=file)
+        else:
+            em.add_field(name="Board", value=game.get_board_text(), inline=False)
+            await ctx.send(content=content, embed=em)
 
     @commands.group(name="chess", invoke_without_command=True)
     async def chess(self, ctx):
@@ -90,7 +129,6 @@ class Chess(commands.Cog):
         p = ctx.prefix
         em.add_field(name="Player vs Player", value=f"`{p}chess start @user`", inline=False)
         em.add_field(name=f"Player vs Bot ({pve_status})", value=f"`{p}chess play [elo]` - Default ELO: 1350\n`{p}chess setelo <elo>`", inline=False)
-        # Update help text di sini
         em.add_field(name="Controls", value=f"`{p}chess move <e4 atau e2e4>`\n`{p}chess board`\n`{p}chess resign`", inline=False)
         em.add_field(name="Fun", value=f"`{p}chess puzzle` - Daily Lichess puzzle", inline=False)
         await ctx.send(embed=em)
@@ -104,9 +142,7 @@ class Chess(commands.Cog):
         game = ChessGame(white=ctx.author, black=opponent)
         self.games[ctx.channel.id] = game
         
-        em = self.embed_builder("♟️ PvP Game Started!", f"**⚪ White:** {ctx.author.mention}\n**⚫ Black:** {opponent.mention}")
-        em.add_field(name="Board", value=game.get_board_text(), inline=False)
-        await ctx.send(opponent.mention, embed=em)
+        await self.send_board(ctx, "♟️ PvP Game Started!", f"**⚪ White:** {ctx.author.mention}\n**⚫ Black:** {opponent.mention}", game, content=opponent.mention)
 
     @chess.command(name="play")
     async def start_pve(self, ctx, elo: int = 1350):
@@ -121,9 +157,7 @@ class Chess(commands.Cog):
         game = ChessGame(white=ctx.author, black=self.bot.user, is_bot_game=True, engine=engine)
         self.games[ctx.channel.id] = game
         
-        em = self.embed_builder("🤖 PvE Game Started!", f"**⚪ White (You):** {ctx.author.mention}\n**⚫ Black (Bot):** {self.bot.user.mention}\n**Bot ELO:** {elo}")
-        em.add_field(name="Board", value=game.get_board_text(), inline=False)
-        await ctx.send(embed=em)
+        await self.send_board(ctx, "🤖 PvE Game Started!", f"**⚪ White (You):** {ctx.author.mention}\n**⚫ Black (Bot):** {self.bot.user.mention}\n**Bot ELO:** {elo}", game)
 
     @chess.command(name="setelo")
     async def set_elo(self, ctx, elo: int):
@@ -156,13 +190,13 @@ class Chess(commands.Cog):
         elif game.board.is_check():
             result = "⚠️ **Check!**"
 
-        em = self.embed_builder("♟️ Move Made", f"**Move:** `{move_str}`\n{result}")
-        em.add_field(name="Board", value=game.get_board_text(), inline=False)
-        await ctx.send(embed=em)
+        await self.send_board(ctx, "♟️ Move Made", f"**Move:** `{move_str}`\n{result}", game)
 
+        # ============================================
+        # BOT TURN (STOCKFISH ENGINE)
+        # ============================================
         if game.is_bot_game and game.board.turn == chess_lib.BLACK and not game.board.is_game_over():
             status_msg = await ctx.send("🤖 **Bot is thinking...**")
-            # Fix Python 3.10+ deprecation
             loop = asyncio.get_running_loop()
             try:
                 game.engine.set_fen_position(game.board.fen())
@@ -178,9 +212,8 @@ class Chess(commands.Cog):
                     elif game.board.is_check():
                         result_bot = "⚠️ **Check!**"
 
-                    em_bot = self.embed_builder("🤖 Bot Moved", f"**Move:** `{best_move}`\n{result_bot}")
-                    em_bot.add_field(name="Board", value=game.get_board_text(), inline=False)
-                    await status_msg.edit(content=None, embed=em_bot)
+                    await status_msg.delete()
+                    await self.send_board(ctx, "🤖 Bot Moved", f"**Move:** `{best_move}`\n{result_bot}", game)
                 else:
                     await status_msg.edit(content="❌ Bot couldn't find a move.")
             except Exception as e:
@@ -191,16 +224,13 @@ class Chess(commands.Cog):
         game = self.games.get(ctx.channel.id)
         if not game: return await ctx.send("❌ No active game here.")
         opponent = f"Bot (ELO: {game.engine.get_elo_rating()})" if game.is_bot_game else game.black.mention
-        em = self.embed_builder("♟️ Current Board", f"**⚪ White:** {game.white.mention}\n**⚫ Black:** {opponent}")
-        em.add_field(name="Board", value=game.get_board_text(), inline=False)
-        await ctx.send(embed=em)
+        await self.send_board(ctx, "♟️ Current Board", f"**⚪ White:** {game.white.mention}\n**⚫ Black:** {opponent}", game)
 
     @chess.command(name="resign")
     async def resign_game(self, ctx):
         game = self.games.get(ctx.channel.id)
         if not game: return await ctx.send("❌ No active game here.")
         
-        # Fix logic resign di sini
         is_white = ctx.author.id == game.white.id
         is_black = (not game.is_bot_game and ctx.author.id == game.black.id)
         
@@ -229,6 +259,14 @@ class Chess(commands.Cog):
                 em.add_field(name="Position", value=f"```{board.unicode(invert_color=True)}```", inline=False)
         except: pass
         await ctx.send(embed=em)
+        
+    def get_stockfish_engine(self, elo=1350):
+        if not self.stockfish_available: return None
+        try:
+            engine = Stockfish(path=self.stockfish_path, depth=10)
+            engine.set_elo_rating(elo)
+            return engine
+        except: return None
 
 async def setup(bot):
     await bot.add_cog(Chess(bot))
