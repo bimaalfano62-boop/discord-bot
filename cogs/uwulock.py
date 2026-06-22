@@ -99,8 +99,7 @@ class UwuLock(commands.Cog):
         if message.author.id not in self.locked:
             return
 
-        if message.author.guild_permissions.manage_channels:
-            return
+        # ✅ GA ADA bypass lagi — semua kena
 
         channel = message.channel
         bot_me = channel.guild.me
@@ -138,8 +137,9 @@ class UwuLock(commands.Cog):
     async def uwulock_cmd(self, ctx, member: discord.Member, *, reason: str = "Tidak ada alasan"):
         if member.bot:
             return await ctx.send(embed=discord.Embed(description="❌ Ga bisa uwulock bot.", color=0xFF6B6B))
-        if member.guild_permissions.manage_channels:
-            return await ctx.send(embed=discord.Embed(description=f"❌ {member.mention} punya **Manage Channels**, ga bisa di-lock.", color=0xFF6B6B))
+        
+        # ✅ HAPUS cek permission — owner & admin bisa kena
+        
         if member.id in self.locked:
             info = self.locked[member.id]
             locker = self.bot.get_user(info["by"])
