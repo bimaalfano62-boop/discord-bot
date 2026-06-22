@@ -80,11 +80,11 @@ class AIBot(commands.Bot):
 bot = AIBot()
 
 # ============================================
-#  HELPER: cek apakah user sedang di-uwulock
+#  HELPER: Check if user is currently punished
 # ============================================
-def is_uwulocked(user_id: int) -> bool:
-    """Cek ke cog UwuLock apakah user ini sedang di-lock."""
-    cog = bot.get_cog("UwuLock")
+def is_punished(user_id: int) -> bool:
+    """Check Punish cog if user is locked to a mode."""
+    cog = bot.get_cog("Punish")
     if cog and user_id in cog.locked:
         return True
     return False
@@ -97,12 +97,12 @@ async def on_message(message):
     if message.author.bot:
         return
 
-      # ── ▼▼▼ UWULOCK: user yang di-lock skip AI/reply/snipe, tapi command tetap jalan ▼▼▼ ──
-    if is_uwulocked(message.author.id):
+    # ── ▼▼▼ PUNISH: skip AI/reply/snipe for punished users, but let commands run ▼▼▼ ──
+    if is_punished(message.author.id):
         await bot.process_commands(message)
         return
     # ── ▲▲▲ ▲▲▲ ──
-    
+
     mentioned = bot.user.mentioned_in(message)
     is_dm = isinstance(message.channel, discord.DMChannel)
 
@@ -163,8 +163,8 @@ async def on_message(message):
 @bot.event
 async def on_message_edit(before, after):
     if before.author.bot: return
-    # ── ▼▼▼ TAMBAHAN: skip snipe edit buat user yang di-uwulock ▼▼▼ ──
-    if is_uwulocked(before.author.id):
+    # ── ▼▼▼ PUNISH CHECK ▼▼▼ ──
+    if is_punished(before.author.id):
         return
     # ── ▲▲▲ ▲▲▲ ──
     bot.edited_messages[before.channel.id] = {
@@ -176,9 +176,8 @@ async def on_message_edit(before, after):
 async def on_message_delete(message):
     if message.author.bot: return
 
-    # ── ▼▼▼ TAMBAHAN: skip anti-delete & snipe buat user yang di-uwulock ▼▼▼ ──
-    # (karena pesan mereka dihapus sama cog, bukan dihapus manual)
-    if is_uwulocked(message.author.id):
+    # ── ▼▼▼ PUNISH CHECK ▼▼▼ ──
+    if is_punished(message.author.id):
         return
     # ── ▲▲▲ ▲▲▲ ──
     
