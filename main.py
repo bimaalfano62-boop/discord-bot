@@ -97,13 +97,12 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # ── ▼▼▼ TAMBAHAN UWULOCK: skip semua logic buat user yang di-lock ▼▼▼ ──
+      # ── ▼▼▼ UWULOCK: user yang di-lock skip AI/reply/snipe, tapi command tetap jalan ▼▼▼ ──
     if is_uwulocked(message.author.id):
-        # tetap proses command (biar bisa !uwuunlock dll), tapi skip AI/reply/snipe
         await bot.process_commands(message)
         return
-    # ── ▲▲▲ TAMBAHAN UWULOCK ▲▲▲ ──
-
+    # ── ▲▲▲ ▲▲▲ ──
+    
     mentioned = bot.user.mentioned_in(message)
     is_dm = isinstance(message.channel, discord.DMChannel)
 
