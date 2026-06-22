@@ -80,12 +80,29 @@ class AIBot(commands.Bot):
 bot = AIBot()
 
 # ============================================
+#  HELPER: cek apakah user sedang di-uwulock
+# ============================================
+def is_uwulocked(user_id: int) -> bool:
+    """Cek ke cog UwuLock apakah user ini sedang di-lock."""
+    cog = bot.get_cog("UwuLock")
+    if cog and user_id in cog.locked:
+        return True
+    return False
+
+# ============================================
 #           MASTER EVENT on_message
 # ============================================
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
+
+    # ── ▼▼▼ TAMBAHAN UWULOCK: skip semua logic buat user yang di-lock ▼▼▼ ──
+    if is_uwulocked(message.author.id):
+        # tetap proses command (biar bisa !uwuunlock dll), tapi skip AI/reply/snipe
+        await bot.process_commands(message)
+        return
+    # ── ▲▲▲ TAMBAHAN UWULOCK ▲▲▲ ──
 
     mentioned = bot.user.mentioned_in(message)
     is_dm = isinstance(message.channel, discord.DMChannel)
@@ -147,6 +164,10 @@ async def on_message(message):
 @bot.event
 async def on_message_edit(before, after):
     if before.author.bot: return
+    # ── ▼▼▼ TAMBAHAN: skip snipe edit buat user yang di-uwulock ▼▼▼ ──
+    if is_uwulocked(before.author.id):
+        return
+    # ── ▲▲▲ ▲▲▲ ──
     bot.edited_messages[before.channel.id] = {
         "before": before.content, "after": after.content,
         "author": before.author, "time": datetime.now()
@@ -155,6 +176,12 @@ async def on_message_edit(before, after):
 @bot.event
 async def on_message_delete(message):
     if message.author.bot: return
+
+    # ── ▼▼▼ TAMBAHAN: skip anti-delete & snipe buat user yang di-uwulock ▼▼▼ ──
+    # (karena pesan mereka dihapus sama cog, bukan dihapus manual)
+    if is_uwulocked(message.author.id):
+        return
+    # ── ▲▲▲ ▲▲▲ ──
     
     if bot.anti_delete["enabled"] and bot.anti_delete.get("channel_id"):
         log_channel = bot.get_channel(int(bot.anti_delete["channel_id"]))
